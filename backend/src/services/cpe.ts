@@ -1,84 +1,15 @@
-
 import axios from 'axios';
-
-// NVD API Response Interfaces
-
-interface CpeTitle {
-    title: string | null;
-    lang: string | null;
-}
-
-interface CpeRef {
-    ref: string | null;
-    type: string | null;
-}
-
-interface CpeDetails {
-    deprecated: boolean | null;
-    cpeName: string | null;
-    cpeNameId: string | null;
-    lastModified: string | null;
-    created: string | null;
-    titles: CpeTitle[] | null;
-    refs: CpeRef[] | null;
-}
-
-interface CpeProduct {
-    cpe: CpeDetails | null;
-}
-
-interface NvdCpeResponse {
-    resultsPerPage: number | null;
-    startIndex: number | null;
-    totalResults: number | null;
-    format: string | null;
-    version: string | null;
-    timestamp: string | null;
-    products: CpeProduct[] | null;
-}
-
-interface NvdApiResult {
-    result: NvdCpeResponse | null;
-}
-
-interface ParsedAsset {
-  raw: string;           // Original input untouched
-  normalized: string;    // Lowercased, trimmed, cleaned
-  tokens: string[];      // Array of meaningful words (versions removed)
-  vendor: string | null;
-  product: string | null;
-  version: string | null;           // Primary version string (e.g., "2.4.51")
-  versionCandidates: string[];      // Fallback version tokens for progressive search
-}
-
-// Parsed CPE components
-interface ParsedCpe {
-    valid: boolean;
-    raw: string;
-    part: string | null;        // a, o, h
-    vendor: string | null;
-    product: string | null;
-    version: string | null;
-    update: string | null;
-    edition: string | null;
-    language: string | null;
-    swEdition: string | null;
-    targetSw: string | null;
-    targetHw: string | null;
-    other: string | null;
-    error?: string;
-}
-
-// CPE Validation result
-interface CpeValidationResult {
-    isValid: boolean;           // CPE format is valid
-    existsInNvd: boolean;       // CPE exists in NVD database
-    exactMatch: boolean;        // Exact CPE found (not just partial)
-    parsed: ParsedCpe;          // Parsed CPE components
-    matches: CpeProduct[];      // Matching CPEs from NVD
-    deprecated: boolean;        // If the CPE is deprecated
-    message: string;            // Human-readable result
-}
+import type {
+    CpeTitle,
+    CpeRef,
+    CpeDetails,
+    CpeProduct,
+    NvdCpeResponse,
+    NvdApiResult,
+    ParsedAsset,
+    ParsedCpe,
+    CpeValidationResult,
+} from '../types/cpe.types';
 
 // Common vendor aliases and known vendors for better matching
 const KNOWN_VENDORS: Set<string> = new Set([

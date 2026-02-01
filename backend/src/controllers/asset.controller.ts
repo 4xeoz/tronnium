@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { cpe } from "../services/cpe";
-import { rankCpeCandidates, CpeCandidate } from "../services/cpeRankingEngine";
+import { rankCpeCandidates } from "../services/cpeRankingEngine";
+import type { CpeCandidate } from "../types/cpe.types";
 
 // ============================================================================
 // CPE ENDPOINTS

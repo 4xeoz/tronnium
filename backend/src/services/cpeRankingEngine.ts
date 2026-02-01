@@ -16,92 +16,17 @@
 // IMPORTS
 // ============================================================================
 
-// Import interfaces from cpe.ts (re-define here for now to avoid circular deps)
-interface ParsedAsset {
-    raw: string;
-    normalized: string;
-    tokens: string[];
-    vendor: string | null;
-    product: string | null;
-    version: string | null;
-    versionCandidates: string[];
-}
+import type {
+    ParsedAsset,
+    CpeDetails,
+    CpeProduct,
+    DeconstructedCpe,
+    ScoreBreakdown,
+    CpeCandidate,
+} from '../types/cpe.types';
 
-interface CpeDetails {
-    deprecated: boolean | null;
-    cpeName: string | null;
-    cpeNameId: string | null;
-    lastModified: string | null;
-    created: string | null;
-    titles: { title: string | null; lang: string | null }[] | null;
-    refs: { ref: string | null; type: string | null }[] | null;
-}
-
-interface CpeProduct {
-    cpe: CpeDetails | null;
-}
-
-// ============================================================================
-// INTERFACES
-// ============================================================================
-
-/**
- * Parsed CPE components from a cpeName string
- * Example: "cpe:2.3:o:ewon:ewon_firmware:10.0s0:*:*:*:*:*:*:*"
- * 
- * TODO: Import or re-export ParsedCpe from cpe.ts if needed
- */
-export interface DeconstructedCpe {
-    raw: string;                // Original cpeName string
-    part: string;               // a=application, o=os, h=hardware
-    vendor: string;             // e.g., "ewon"
-    product: string;            // e.g., "ewon_firmware"
-    version: string;            // e.g., "10.0s0" or "*"
-    update: string;             // e.g., "*"
-    edition: string;
-    language: string;
-    swEdition: string;
-    targetSw: string;
-    targetHw: string;
-    other: string;
-    tokens: string[];           // All meaningful tokens combined for Jaccard
-}
-
-/**
- * Score breakdown for transparency and debugging
- */
-export interface ScoreBreakdown {
-    vendorScore: number;        // 0-1, weighted 25%
-    productScore: number;       // 0-1, weighted 35%
-    versionScore: number;       // 0-1, weighted 25%
-    tokenOverlapScore: number;  // 0-1 (Jaccard similarity), weighted 15%
-}
-
-/**
- * Final CPE candidate with score
- */
-export interface CpeCandidate {
-    cpeName: string;            // Full CPE 2.3 string
-    cpeNameId: string;          // NVD unique ID
-    title: string | null;       // Human-readable title from NVD
-    score: number;              // 0-100 percentage
-    breakdown: ScoreBreakdown;  // Individual component scores
-    deconstructed: DeconstructedCpe;  // Parsed CPE components
-}
-
-/**
- * Import from cpe.ts - the parsed asset from Phase 1
- * TODO: Consider moving shared interfaces to a types file
- */
-// interface ParsedAsset {
-//   raw: string;
-//   normalized: string;
-//   tokens: string[];
-//   vendor: string | null;
-//   product: string | null;
-//   version: string | null;
-//   versionCandidates: string[];
-// }
+// Re-export types for consumers
+export type { ParsedAsset, CpeProduct, CpeCandidate, ScoreBreakdown, DeconstructedCpe };
 
 // ============================================================================
 // SCORING WEIGHTS - Configurable
@@ -815,6 +740,3 @@ export function rankCpeCandidates(
     // Phase 5: Rank and return top N
     return rankCandidates(candidates, topN);
 }
-
-// Export types (ParsedAsset and CpeProduct are local interfaces, not from external module)
-export type { ParsedAsset, CpeProduct };

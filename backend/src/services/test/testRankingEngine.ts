@@ -1,7 +1,8 @@
 // Test script for cpeRankingEngine.ts
-// Run with: npx ts-node src/services/testRankingEngine.ts
+// Run with: npx ts-node src/services/test/testRankingEngine.ts
 
-import { rankCpeCandidates, ParsedAsset, CpeProduct } from '../cpeRankingEngine';
+import { rankCpeCandidates } from '../cpeRankingEngine';
+import type { ParsedAsset, CpeProduct } from '../../types/cpe.types';
 
 // Sample ParsedAsset (simulating what cpe.ts would produce)
 const testAsset: ParsedAsset = {
