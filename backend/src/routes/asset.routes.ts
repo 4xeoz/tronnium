@@ -1,13 +1,32 @@
 import { Router } from "express";
-import { jwtAuthGuard } from "../auth/passport";
-import passport from "passport";
+import { cpeFindHandler, cpeValidateHandler } from "../controllers/asset.controller";
 import { logRequest } from "../middleware/logger";
-import { analyzeAssetTextHandler } from "../controllers/asset.controller";
 
 export const assetRouter = Router();
 
-assetRouter.get("/test" , logRequest(), (req, res) => {
+// Health check
+assetRouter.get("/test", logRequest(), (req, res) => {
     res.json({ message: "Asset route is working!" });
 });
 
-assetRouter.post("/analyze", analyzeAssetTextHandler);
+// ============================================================================
+// CPE ROUTES
+// ============================================================================
+//
+// POST /cpe/find     - Find and rank CPE candidates from asset name
+//                      Body: { "assetName": "OpenSSL 1.1.1", "topN": 5 }
+//                      Returns: Ranked CPE candidates with scores
+//
+// POST /cpe/validate - Validate a CPE string format and existence in NVD
+//                      Body: { "cpeString": "cpe:2.3:a:openssl:..." }
+//                      Returns: Validation result with isValid, existsInNvd
+//
+// ============================================================================
+
+// Find and rank CPE candidates from human-readable asset name
+// Runs full pipeline: Parse → Search NVD → Rank & Score
+assetRouter.post("/cpe/find", logRequest(), cpeFindHandler);
+
+// Validate a CPE string against NVD database
+// Checks both format validity and existence in NVD
+assetRouter.post("/cpe/validate", logRequest(), cpeValidateHandler);

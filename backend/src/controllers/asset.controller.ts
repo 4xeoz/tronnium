@@ -1,25 +1,235 @@
 import { Request, Response } from "express";
+import { cpe } from "../services/cpe";
+import { rankCpeCandidates, CpeCandidate } from "../services/cpeRankingEngine";
 
+// ============================================================================
+// CPE ENDPOINTS
+// ============================================================================
+//
+// POST /cpe/find
+// --------------
+// Find CPE(s) from an asset name (human-readable software/hardware name)
+// Runs the full pipeline: Parse → Search NVD → Rank candidates
+//
+// Request Body:
+//   { "assetName": "OpenSSL 1.1.1" }
+//   { "assetName": "Siemens SIMATIC S7-1500 2.9.2" }
+//   { "assetName": "Apache HTTP Server 2.4.51" }
+//   { "assetName": "...", "topN": 10 }  // Optional: number of results (default: 5)
+//
+// Response:
+//   {
+//     "success": true,
+//     "parsed": {
+//       "raw": "OpenSSL 1.1.1",
+//       "vendor": "openssl",
+//       "product": "openssl",
+//       "version": "1.1.1",
+//       "tokens": ["openssl"],
+//       "versionCandidates": ["1.1.1"]
+//     },
+//     "candidates": [
+//       {
+//         "cpeName": "cpe:2.3:a:openssl:openssl:1.1.1:*:*:*:*:*:*:*",
+//         "cpeNameId": "abc123",
+//         "title": "OpenSSL 1.1.1",
+//         "score": 95.5,
+//         "breakdown": {
+//           "vendorScore": 1.0,
+//           "productScore": 1.0,
+//           "versionScore": 1.0,
+//           "tokenOverlapScore": 0.75
+//         }
+//       },
+//       // ... more ranked candidates
+//     ],
+//     "count": 5
+//   }
+//
+// ============================================================================
 
+export async function cpeFindHandler(req: Request, res: Response) {
+    try {
+        const { assetName, topN } = req.body;
 
-export async function analyzeAssetTextHandler(req : Request,res : Response) {
-    const { assetInputText } = req.body;
+        // Validate input
+        if (!assetName || typeof assetName !== 'string') {
+            return res.status(400).json({ 
+                success: false,
+                error: "INVALID_INPUT",
+                message: "assetName is required and must be a string",
+                example: { assetName: "OpenSSL 1.1.1", topN: 5 }
+            });
+        }
 
-    if (!assetInputText) {
-        return res.status(400).json({ message: "assetInputText is required in the request body." });
+        const trimmedAssetName = assetName.trim();
+        if (trimmedAssetName.length < 2) {
+            return res.status(400).json({
+                success: false,
+                error: "INVALID_INPUT",
+                message: "assetName must be at least 2 characters long"
+            });
+        }
+
+        // Validate topN if provided
+        const resultLimit = topN && typeof topN === 'number' && topN > 0 ? Math.min(topN, 20) : 5;
+
+        // Phase 1 & 2: Parse asset and search NVD
+        console.log(`[CPE Find] Processing: "${trimmedAssetName}"`);
+        const { parsed, results } = await cpe.findCpe(trimmedAssetName);
+
+        // Phase 3, 4, 5: Rank the CPE candidates
+        const rankedCandidates: CpeCandidate[] = rankCpeCandidates(parsed, results, resultLimit);
+
+        console.log(`[CPE Find] Found ${results.length} CPEs, returning top ${rankedCandidates.length} ranked candidates`);
+
+        return res.json({
+            success: true,
+            parsed: {
+                raw: parsed.raw,
+                normalized: parsed.normalized,
+                vendor: parsed.vendor,
+                product: parsed.product,
+                version: parsed.version,
+                tokens: parsed.tokens
+            },
+            candidates: rankedCandidates.map(candidate => ({
+                cpeName: candidate.cpeName,
+                cpeNameId: candidate.cpeNameId,
+                title: candidate.title,
+                score: candidate.score,
+                breakdown: {
+                    vendor: Math.round(candidate.breakdown.vendorScore * 100),
+                    product: Math.round(candidate.breakdown.productScore * 100),
+                    version: Math.round(candidate.breakdown.versionScore * 100),
+                    tokenOverlap: Math.round(candidate.breakdown.tokenOverlapScore * 100)
+                }
+            })),
+            count: rankedCandidates.length,
+            totalFound: results.length
+        });
+    } catch (error) {
+        console.error("[CPE Find] Error:", error);
+        return res.status(500).json({ 
+            success: false,
+            error: "SERVER_ERROR",
+            message: "Failed to find CPE candidates",
+            detail: process.env.NODE_ENV === 'development' ? String(error) : undefined
+        });
     }
+}
 
+// ============================================================================
+// POST /cpe/validate
+// ------------------
+// Validate a CPE string (check format and if it exists in NVD)
+//
+// Request Body:
+//   { "cpeString": "cpe:2.3:a:openssl:openssl:1.1.1:*:*:*:*:*:*:*" }
+//   { "cpeString": "cpe:2.3:h:siemens:simatic_s7-1500:-:*:*:*:*:*:*:*" }
+//
+// Response (valid & exists):
+//   {
+//     "success": true,
+//     "isValid": true,
+//     "existsInNvd": true,
+//     "exactMatch": true,
+//     "deprecated": false,
+//     "message": "CPE is valid and exists in NVD database",
+//     "parsed": {
+//       "valid": true,
+//       "part": "a",
+//       "vendor": "openssl",
+//       "product": "openssl",
+//       "version": "1.1.1"
+//     }
+//   }
+//
+// Response (invalid format - 400):
+//   {
+//     "success": false,
+//     "error": "INVALID_CPE_FORMAT",
+//     "isValid": false,
+//     "message": "Invalid CPE format: Must start with cpe:2.3:",
+//     "parsed": { "valid": false, "error": "..." }
+//   }
+//
+// Response (valid format but not found - 200):
+//   {
+//     "success": true,
+//     "isValid": true,
+//     "existsInNvd": false,
+//     "exactMatch": false,
+//     "message": "CPE format is valid but no matching entries found in NVD database"
+//   }
+//
+// ============================================================================
 
-    // const result = await analzye
+export async function cpeValidateHandler(req: Request, res: Response) {
+    try {
+        const { cpeString } = req.body;
 
+        // Validate input
+        if (!cpeString || typeof cpeString !== 'string') {
+            return res.status(400).json({ 
+                success: false,
+                error: "INVALID_INPUT",
+                message: "cpeString is required and must be a string",
+                example: { cpeString: "cpe:2.3:a:openssl:openssl:1.1.1:*:*:*:*:*:*:*" }
+            });
+        }
 
-    // For demo, just echo back the input text with a message
-    const analysisResult = {
-        message: "Asset text analyzed successfully",
-        originalText: assetInputText,
-        // Add more analysis results here as needed
-    };
+        const trimmedCpe = cpeString.trim();
+        if (trimmedCpe.length < 10) {
+            return res.status(400).json({
+                success: false,
+                error: "INVALID_INPUT",
+                message: "cpeString is too short to be a valid CPE"
+            });
+        }
 
-    res.json(analysisResult);
+        console.log(`[CPE Validate] Validating: "${trimmedCpe}"`);
+        const result = await cpe.validateCpe(trimmedCpe);
 
+        // If CPE format is invalid, return 400
+        if (!result.isValid) {
+            return res.status(400).json({
+                success: false,
+                error: "INVALID_CPE_FORMAT",
+                isValid: false,
+                existsInNvd: false,
+                exactMatch: false,
+                deprecated: false,
+                message: result.message,
+                parsed: result.parsed
+            });
+        }
+
+        // CPE format is valid - return the validation result
+        return res.json({
+            success: true,
+            isValid: result.isValid,
+            existsInNvd: result.existsInNvd,
+            exactMatch: result.exactMatch,
+            deprecated: result.deprecated,
+            message: result.message,
+            parsed: {
+                part: result.parsed.part,
+                vendor: result.parsed.vendor,
+                product: result.parsed.product,
+                version: result.parsed.version,
+                update: result.parsed.update
+            },
+            // Only include matches count, not full data (to keep response lean)
+            matchesFound: result.matches.length
+        });
+    } catch (error) {
+        console.error("[CPE Validate] Error:", error);
+        return res.status(500).json({ 
+            success: false,
+            error: "SERVER_ERROR",
+            message: "Failed to validate CPE",
+            detail: process.env.NODE_ENV === 'development' ? String(error) : undefined
+        });
+    }
 }

@@ -123,8 +123,8 @@ model Asset {
   assetRole         String?     // keep as string for now: "firewall", "plc", "hmi", "server", etc.
 
   // ---- NVD matching summary fields ----
-  bestMatchedCpe    String?     // top CPE you picked (if any)
-  matchMethod       MatchMethod @default(NONE)
+  bestMatchedCpe    String?     // top CPE you picked (if any) this will be a list of multple CPEs -----------------------TODO
+  matchMethod       MatchMethod @default(NONE) // sometimes certain assets dont have cpes, so we store as keyword search
 
   // Pipeline confidence (0..1) from your scoring
   normalizationConf Float?      @db.Real

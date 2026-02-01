@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { fetchHealth, getBackendUrl, type HealthResponse } from "@/lib/backend";
 import { useUser } from "@/lib/UserContext";
+import Link from 'next/link';
 
 export default function Home() {
   const backendUrl = getBackendUrl();
@@ -50,6 +51,9 @@ export default function Home() {
             >
               Logout
             </button>
+            <Link href="/dashboard" className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700">
+              Go to Dashboard
+            </Link>
           </section>
         ) : (
           <section className="mb-6 rounded-2xl border border-slate-100 bg-slate-50 p-6">
