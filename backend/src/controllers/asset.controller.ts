@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { cpe } from "../services/cpe";
 import { rankCpeCandidates } from "../services/cpeRankingEngine";
 import type { CpeCandidate } from "../types/cpe.types";
+import prisma from "../lib/prisma";
+import type { AuthenticatedUser } from "../types/express";
 
 // ============================================================================
 // CPE ENDPOINTS
@@ -231,6 +233,163 @@ export async function cpeValidateHandler(req: Request, res: Response) {
             error: "SERVER_ERROR",
             message: "Failed to validate CPE",
             detail: process.env.NODE_ENV === 'development' ? String(error) : undefined
+        });
+    }
+}
+
+// ============================================================================
+// GET /assets/:environmentId
+// --------------------------
+// Get all assets for an environment
+//
+// Response:
+//   {
+//     "success": true,
+//     "assets": [...]
+//   }
+// ============================================================================
+
+export async function getAssetsHandler(req: Request, res: Response) {
+    try {
+        const { environmentId } = req.params;
+        const user = req.user as AuthenticatedUser;
+
+        // Verify environment belongs to user
+        const environment = await prisma.environment.findFirst({
+            where: {
+                id: environmentId,
+                ownerId: user.id,
+            },
+        });
+
+        if (!environment) {
+            return res.status(404).json({
+                success: false,
+                error: "NOT_FOUND",
+                message: "Environment not found",
+            });
+        }
+
+        const assets = await prisma.asset.findMany({
+            where: { environmentId },
+            orderBy: { createdAt: "desc" },
+        });
+
+        return res.json({
+            success: true,
+            assets,
+        });
+    } catch (error) {
+        console.error("[Get Assets] Error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "SERVER_ERROR",
+            message: "Failed to get assets",
+        });
+    }
+}
+
+// ============================================================================
+// POST /assets/:environmentId
+// ---------------------------
+// Create a new asset in an environment
+//
+// Request Body:
+//   {
+//     "name": "OpenSSL Server",          // Required: User-friendly name
+//     "description": "Main SSL library", // Optional: Description
+//     "cpes": [                          // Optional: Array of CPE objects with full metadata
+//       { cpeName, cpeNameId, title, score, breakdown: { vendor, product, version, tokenOverlap } }
+//     ],
+//     "domain": "IT" | "OT" | "UNKNOWN"  // Optional: Asset domain
+//   }
+//
+// Response:
+//   {
+//     "success": true,
+//     "asset": { ... }
+//   }
+// ============================================================================
+
+type CpeInput = {
+    cpeName: string;
+    cpeNameId: string;
+    title: string;
+    score: number;
+    breakdown: {
+        vendor: number;
+        product: number;
+        version: number;
+        tokenOverlap: number;
+    };
+};
+
+export async function createAssetHandler(req: Request, res: Response) {
+    try {
+        const { environmentId } = req.params;
+        const user = req.user as AuthenticatedUser;
+        const { name, description, cpes, domain } = req.body;
+
+        // Validate input
+        if (!name || typeof name !== "string") {
+            return res.status(400).json({
+                success: false,
+                error: "INVALID_INPUT",
+                message: "name is required and must be a string",
+            });
+        }
+
+        // Verify environment belongs to user
+        const environment = await prisma.environment.findFirst({
+            where: {
+                id: environmentId,
+                ownerId: user.id,
+            },
+        });
+
+        if (!environment) {
+            return res.status(404).json({
+                success: false,
+                error: "NOT_FOUND",
+                message: "Environment not found",
+            });
+        }
+
+        // CPEs are trusted since they were displayed by the backend and selected by user
+        // Store full CPE objects with scores and breakdown
+        const selectedCpes: CpeInput[] = Array.isArray(cpes) 
+            ? cpes.filter((cpe: unknown): cpe is CpeInput => 
+                typeof cpe === 'object' && 
+                cpe !== null && 
+                'cpeName' in cpe && 
+                typeof (cpe as CpeInput).cpeName === 'string'
+              )
+            : [];
+
+        // Create the asset
+        const asset = await prisma.asset.create({
+            data: {
+                environmentId,
+                name: name.trim(),
+                description: description?.trim() || null,
+                domain: domain || "UNKNOWN",
+                cpes: selectedCpes,  // Stored as JSON
+            },
+        });
+
+        console.log(`[Create Asset] Created asset "${name}" with ${selectedCpes.length} CPEs in environment ${environmentId}`);
+
+        return res.status(201).json({
+            success: true,
+            asset,
+        });
+    } catch (error) {
+        console.error("[Create Asset] Error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "SERVER_ERROR",
+            message: "Failed to create asset",
+            detail: process.env.NODE_ENV === "development" ? String(error) : undefined,
         });
     }
 }

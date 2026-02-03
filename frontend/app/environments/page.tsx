@@ -106,10 +106,10 @@ function DropdownMenu({
               setIsOpen(false);
             }}
             disabled={isDeleting}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error-text hover:bg-error-bg transition-colors"
           >
             {isDeleting ? (
-              <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-error-text border-t-transparent rounded-full animate-spin" />
             ) : (
               <FiTrash2 className="w-4 h-4" />
             )}
@@ -149,7 +149,7 @@ function EnvironmentRow({
               {environment.name}
             </h3>
             <span className="flex items-center gap-1.5 text-xs text-text-muted">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="w-1.5 h-1.5 rounded-full bg-status-active" />
               Active
             </span>
           </div>
@@ -316,7 +316,7 @@ export default function EnvironmentsPage() {
             </div>
           ) : error ? (
             <div className="py-12 text-center">
-              <p className="text-sm text-red-500 mb-2">{error}</p>
+              <p className="text-sm text-error-text mb-2">{error}</p>
               <button
                 onClick={loadEnvironments}
                 className="text-sm text-text-primary hover:underline"

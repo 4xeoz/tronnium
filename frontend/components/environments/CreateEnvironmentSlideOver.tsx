@@ -87,7 +87,7 @@ export default function CreateEnvironmentSlideOver({
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex-1 flex flex-col p-6 gap-6">
             {error && (
-              <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-700 text-sm">
+              <div className="p-3 bg-error-bg border border-error-border rounded-lg text-error-text text-sm">
                 {error}
               </div>
             )}

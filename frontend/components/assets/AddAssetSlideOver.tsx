@@ -1,0 +1,480 @@
+"use client";
+
+import { useState } from "react";
+import { FiX, FiSearch, FiCheck, FiAlertCircle, FiLoader } from "react-icons/fi";
+import {
+  findCpe,
+  validateCpe,
+  createAsset,
+  type CpeCandidate,
+  type CreateAssetInput,
+} from "@/lib/api";
+
+interface AddAssetSlideOverProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+  environmentId: string;
+}
+
+type SearchMode = "name" | "cpe";
+type Step = "input" | "select" | "confirm";
+
+export default function AddAssetSlideOver({
+  isOpen,
+  onClose,
+  onSuccess,
+  environmentId,
+}: AddAssetSlideOverProps) {
+  // Form state
+  const [searchMode, setSearchMode] = useState<SearchMode>("name");
+  const [step, setStep] = useState<Step>("input");
+  const [assetName, setAssetName] = useState("");
+  const [cpeInput, setCpeInput] = useState("");
+  const [description, setDescription] = useState("");
+
+  // Search results state
+  const [candidates, setCandidates] = useState<CpeCandidate[]>([]);
+  const [selectedCpes, setSelectedCpes] = useState<CpeCandidate[]>([]);
+
+  // Loading/error states
+  const [isSearching, setIsSearching] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [validationResult, setValidationResult] = useState<{
+    isValid: boolean;
+    message: string;
+  } | null>(null);
+
+  const resetForm = () => {
+    setSearchMode("name");
+    setStep("input");
+    setAssetName("");
+    setCpeInput("");
+    setDescription("");
+    setCandidates([]);
+    setSelectedCpes([]);
+    setError(null);
+    setValidationResult(null);
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
+  // Search by asset name
+  const handleSearchByName = async () => {
+    if (!assetName.trim()) return;
+
+    setError(null);
+    setIsSearching(true);
+
+    try {
+      const result = await findCpe(assetName.trim(), 10);
+      if (result.success && result.candidates.length > 0) {
+        setCandidates(result.candidates);
+        setStep("select");
+      } else {
+        setError("No CPE candidates found. Try a different search term.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to search CPEs");
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Validate CPE string
+  const handleValidateCpe = async () => {
+    if (!cpeInput.trim()) return;
+
+    setError(null);
+    setValidationResult(null);
+    setIsValidating(true);
+
+    try {
+      const result = await validateCpe(cpeInput.trim());
+      setValidationResult({
+        isValid: result.isValid,
+        message: result.message,
+      });
+
+      if (result.isValid) {
+        // Create a CpeCandidate object for manually entered CPE
+        const manualCpe: CpeCandidate = {
+          cpeName: cpeInput.trim(),
+          cpeNameId: "",  // Not available for manual entry
+          title: cpeInput.trim(),
+          score: 100,  // Manual entry assumed to be exact match
+          breakdown: { vendor: 100, product: 100, version: 100, tokenOverlap: 100 },
+        };
+        setSelectedCpes([manualCpe]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to validate CPE");
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  // Toggle CPE selection
+  const toggleCpeSelection = (cpe: CpeCandidate) => {
+    setSelectedCpes((prev) =>
+      prev.some((c) => c.cpeName === cpe.cpeName)
+        ? prev.filter((c) => c.cpeName !== cpe.cpeName)
+        : [...prev, cpe]
+    );
+  };
+
+  // Create asset
+  const handleCreateAsset = async () => {
+    if (!assetName.trim() && searchMode === "name") {
+      setError("Asset name is required");
+      return;
+    }
+
+    setError(null);
+    setIsCreating(true);
+
+    try {
+      const data: CreateAssetInput = {
+        name: assetName.trim() || cpeInput.trim(),
+        description: description.trim() || undefined,
+        cpes: selectedCpes.length > 0 ? selectedCpes : undefined,
+      };
+
+      await createAsset(environmentId, data);
+      onSuccess();
+      handleClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create asset");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 bg-black/50 transition-opacity duration-300 z-40 ${
+          isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={handleClose}
+      />
+
+      {/* Slide-over panel */}
+      <div
+        className={`fixed inset-y-0 right-0 w-full max-w-lg bg-surface shadow-xl transform transition-transform duration-300 ease-in-out z-50 ${
+          isOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="h-full flex flex-col">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-text-primary">
+                Add Asset
+              </h2>
+              <p className="text-sm text-text-muted mt-0.5">
+                {step === "input" && "Search for an asset or enter a CPE directly"}
+                {step === "select" && "Select CPEs to associate with this asset"}
+                {step === "confirm" && "Review and confirm"}
+              </p>
+            </div>
+            <button
+              onClick={handleClose}
+              className="p-2 rounded-full hover:bg-surface-secondary transition-colors"
+            >
+              <FiX className="w-5 h-5 text-text-secondary" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {error && (
+              <div className="mb-4 p-3 bg-error-bg border border-error-border rounded-lg text-error-text text-sm flex items-center gap-2">
+                <FiAlertCircle className="w-4 h-4 shrink-0" />
+                {error}
+              </div>
+            )}
+
+            {/* Step 1: Input */}
+            {step === "input" && (
+              <div className="space-y-6">
+                {/* Search Mode Toggle */}
+                <div className="flex gap-2 p-1 bg-surface-secondary rounded-lg">
+                  <button
+                    onClick={() => setSearchMode("name")}
+                    className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      searchMode === "name"
+                        ? "bg-surface text-text-primary shadow-sm"
+                        : "text-text-muted hover:text-text-secondary"
+                    }`}
+                  >
+                    Search by Name
+                  </button>
+                  <button
+                    onClick={() => setSearchMode("cpe")}
+                    className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      searchMode === "cpe"
+                        ? "bg-surface text-text-primary shadow-sm"
+                        : "text-text-muted hover:text-text-secondary"
+                    }`}
+                  >
+                    Enter CPE
+                  </button>
+                </div>
+
+                {searchMode === "name" ? (
+                  <>
+                    {/* Asset Name Search */}
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        Asset Name
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={assetName}
+                          onChange={(e) => setAssetName(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleSearchByName()}
+                          placeholder="e.g., OpenSSL 1.1.1, Apache HTTP Server 2.4"
+                          className="w-full px-4 py-3 pr-12 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent"
+                        />
+                        <button
+                          onClick={handleSearchByName}
+                          disabled={!assetName.trim() || isSearching}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-text-muted hover:text-text-primary disabled:opacity-50"
+                        >
+                          {isSearching ? (
+                            <FiLoader className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <FiSearch className="w-5 h-5" />
+                          )}
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-text-muted">
+                        Enter a software/hardware name to find matching CPEs
+                      </p>
+                    </div>
+
+                    {/* Description (optional) */}
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        Description (Optional)
+                      </label>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Additional details about this asset..."
+                        rows={3}
+                        className="w-full px-4 py-3 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent resize-none"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Direct CPE Input */}
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-2">
+                        CPE String
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={cpeInput}
+                          onChange={(e) => {
+                            setCpeInput(e.target.value);
+                            setValidationResult(null);
+                          }}
+                          onKeyDown={(e) => e.key === "Enter" && handleValidateCpe()}
+                          placeholder="cpe:2.3:a:vendor:product:version:*:*:*:*:*:*:*"
+                          className="w-full px-4 py-3 pr-12 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent font-mono text-sm"
+                        />
+                        <button
+                          onClick={handleValidateCpe}
+                          disabled={!cpeInput.trim() || isValidating}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-text-muted hover:text-text-primary disabled:opacity-50"
+                        >
+                          {isValidating ? (
+                            <FiLoader className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <FiCheck className="w-5 h-5" />
+                          )}
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-text-muted">
+                        Enter a valid CPE 2.3 string to validate
+                      </p>
+                    </div>
+
+                    {/* Validation Result */}
+                    {validationResult && (
+                      <div
+                        className={`p-3 rounded-lg border text-sm ${
+                          validationResult.isValid
+                            ? "bg-success-bg border-success-border text-success-text"
+                            : "bg-error-bg border-error-border text-error-text"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {validationResult.isValid ? (
+                            <FiCheck className="w-4 h-4" />
+                          ) : (
+                            <FiAlertCircle className="w-4 h-4" />
+                          )}
+                          {validationResult.message}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Asset Name for CPE mode */}
+                    {validationResult?.isValid && (
+                      <div>
+                        <label className="block text-sm font-medium text-text-primary mb-2">
+                          Asset Name
+                        </label>
+                        <input
+                          type="text"
+                          value={assetName}
+                          onChange={(e) => setAssetName(e.target.value)}
+                          placeholder="Give this asset a friendly name"
+                          className="w-full px-4 py-3 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Step 2: Select CPEs */}
+            {step === "select" && (
+              <div className="space-y-4">
+                <div className="text-sm text-text-secondary mb-4">
+                  Found {candidates.length} CPE candidates for &quot;{assetName}&quot;.
+                  Select the ones that match your asset:
+                </div>
+
+                <div className="space-y-2">
+                  {candidates.map((candidate) => {
+                    const isSelected = selectedCpes.some((c) => c.cpeName === candidate.cpeName);
+                    return (
+                      <button
+                        key={candidate.cpeName}
+                        onClick={() => toggleCpeSelection(candidate)}
+                        className={`w-full p-4 rounded-lg border text-left transition-colors ${
+                          isSelected
+                            ? "border-brand-1 bg-brand-1/10"
+                            : "border-border hover:border-border-secondary hover:bg-surface-secondary"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-text-primary text-sm">
+                              {candidate.title}
+                            </div>
+                            <div className="text-xs text-text-muted font-mono mt-1 truncate">
+                              {candidate.cpeName}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className={`px-2 py-1 rounded text-xs font-medium ${
+                                candidate.score >= 80
+                                  ? "bg-success-bg text-success-text"
+                                  : candidate.score >= 50
+                                  ? "bg-warning-bg text-warning-text"
+                                  : "bg-surface-secondary text-text-muted"
+                              }`}
+                            >
+                              {Math.round(candidate.score)}%
+                            </span>
+                            <div
+                              className={`w-5 h-5 rounded border flex items-center justify-center ${
+                                isSelected
+                                  ? "bg-brand-1 border-brand-1"
+                                  : "border-border"
+                              }`}
+                            >
+                              {isSelected && (
+                                <FiCheck className="w-3 h-3 text-brand-2" />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer Actions */}
+          <div className="px-6 py-4 border-t border-border">
+            <div className="flex gap-3">
+              {step === "input" ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="flex-1 px-4 py-3 rounded-lg border border-border text-text-secondary hover:bg-surface-secondary transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  {searchMode === "name" ? (
+                    <button
+                      onClick={handleSearchByName}
+                      disabled={!assetName.trim() || isSearching}
+                      className="flex-1 px-4 py-3 rounded-lg bg-brand-1 text-brand-2 font-medium hover:bg-brand-1/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {isSearching && <FiLoader className="w-4 h-4 animate-spin" />}
+                      Find CPEs
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleCreateAsset}
+                      disabled={!validationResult?.isValid || isCreating}
+                      className="flex-1 px-4 py-3 rounded-lg bg-brand-1 text-brand-2 font-medium hover:bg-brand-1/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {isCreating && <FiLoader className="w-4 h-4 animate-spin" />}
+                      Add Asset
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStep("input");
+                      setCandidates([]);
+                      setSelectedCpes([]);
+                    }}
+                    className="flex-1 px-4 py-3 rounded-lg border border-border text-text-secondary hover:bg-surface-secondary transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleCreateAsset}
+                    disabled={isCreating}
+                    className="flex-1 px-4 py-3 rounded-lg bg-brand-1 text-brand-2 font-medium hover:bg-brand-1/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isCreating && <FiLoader className="w-4 h-4 animate-spin" />}
+                    {selectedCpes.length > 0
+                      ? `Add with ${selectedCpes.length} CPE${selectedCpes.length > 1 ? "s" : ""}`
+                      : "Add without CPE"}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

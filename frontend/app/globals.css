@@ -4,39 +4,83 @@
 [data-theme="light"] {
   /* Background colors */
   --background: #ffffff;
-  --background-secondary: #EEEEEE;
-  --foreground: #171717;
+  --background-secondary: #F3F4F6;
+  --foreground: #111827;
   
   /* Brand colors */
   --brand-color-1: #C3FA70;
-  --brand-color-2: #3A3E47;
+  --brand-color-2: #1F2937;
   
   /* UI colors */
   --surface: #ffffff;
-  --surface-secondary: #F5F5F5;
-  --border: #E0E0E0;
-  --text-primary: #171717;
-  --text-secondary: #6B7280;
+  --surface-secondary: #F9FAFB;
+  --surface-tertiary: #F3F4F6;
+  --border: #E5E7EB;
+  --border-secondary: #D1D5DB;
+  --text-primary: #111827;
+  --text-secondary: #4B5563;
   --text-muted: #9CA3AF;
+  
+  /* Semantic colors for light mode */
+  --error-bg: #FEF2F2;
+  --error-border: #FECACA;
+  --error-text: #DC2626;
+  --success-bg: #F0FDF4;
+  --success-border: #BBF7D0;
+  --success-text: #16A34A;
+  --warning-bg: #FFFBEB;
+  --warning-border: #FDE68A;
+  --warning-text: #D97706;
+  --info-bg: #EFF6FF;
+  --info-border: #BFDBFE;
+  --info-text: #2563EB;
+  
+  /* Status indicators */
+  --status-active: #10B981;
+  --status-inactive: #6B7280;
+  --status-warning: #F59E0B;
+  --status-error: #EF4444;
 }
 
 [data-theme="dark"] {
-  /* Background colors */
-  --background: #1A1D24;
-  --background-secondary: #2A2D35;
-  --foreground: #F5F5F5;
+  /* Background colors - deeper, richer darks */
+  --background: #09090B;
+  --background-secondary: #0F1115;
+  --foreground: #FAFAFA;
   
   /* Brand colors */
   --brand-color-1: #C3FA70;
-  --brand-color-2: #E0E0E0;
+  --brand-color-2: #0F1115;
   
-  /* UI colors */
-  --surface: #2A2D35;
-  --surface-secondary: #3A3E47;
-  --border: #4A4E57;
-  --text-primary: #F5F5F5;
-  --text-secondary: #B0B0B0;
-  --text-muted: #808080;
+  /* UI colors - refined dark palette */
+  --surface: #121418;
+  --surface-secondary: #1A1D23;
+  --surface-tertiary: #22262E;
+  --border: #27272A;
+  --border-secondary: #3F3F46;
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-muted: #71717A;
+  
+  /* Semantic colors for dark mode - softer, easier on eyes */
+  --error-bg: #1C1517;
+  --error-border: #7F1D1D;
+  --error-text: #FCA5A5;
+  --success-bg: #14191A;
+  --success-border: #166534;
+  --success-text: #86EFAC;
+  --warning-bg: #1A1814;
+  --warning-border: #854D0E;
+  --warning-text: #FCD34D;
+  --info-bg: #14161C;
+  --info-border: #1E40AF;
+  --info-text: #93C5FD;
+  
+  /* Status indicators */
+  --status-active: #34D399;
+  --status-inactive: #71717A;
+  --status-warning: #FBBF24;
+  --status-error: #F87171;
 }
 
 @theme inline {
@@ -47,10 +91,28 @@
   --color-brand-2: var(--brand-color-2);
   --color-surface: var(--surface);
   --color-surface-secondary: var(--surface-secondary);
+  --color-surface-tertiary: var(--surface-tertiary);
   --color-border: var(--border);
+  --color-border-secondary: var(--border-secondary);
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
+  --color-error-bg: var(--error-bg);
+  --color-error-border: var(--error-border);
+  --color-error-text: var(--error-text);
+  --color-success-bg: var(--success-bg);
+  --color-success-border: var(--success-border);
+  --color-success-text: var(--success-text);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-border: var(--warning-border);
+  --color-warning-text: var(--warning-text);
+  --color-info-bg: var(--info-bg);
+  --color-info-border: var(--info-border);
+  --color-info-text: var(--info-text);
+  --color-status-active: var(--status-active);
+  --color-status-inactive: var(--status-inactive);
+  --color-status-warning: var(--status-warning);
+  --color-status-error: var(--status-error);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

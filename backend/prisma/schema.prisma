@@ -10,8 +10,6 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 //
@@ -22,12 +20,6 @@ enum AssetDomain {
   IT
   OT
   UNKNOWN
-}
-
-enum MatchMethod {
-  CPE_NAME        // NVD CVE query used ?cpeName=
-  KEYWORD_SEARCH  // NVD CVE query used ?keywordSearch=
-  NONE            // not enough info / failed
 }
 
 //
@@ -89,96 +81,32 @@ model Environment {
 
 //
 // Assets
-// Store BOTH:
-// 1) What user typed (raw fields)
-// 2) Your normalized structured identity (best-effort)
+// Simple asset model - stores user input and selected CPEs with metadata
 //
-// Keep it “lightweight columns” for filtering + JSON for flexible details.
-//
-
-
 
 model Asset {
-  id                String      @id @default(uuid()) @db.Uuid
+  id            String      @id @default(uuid()) @db.Uuid
 
-  environmentId     String      @db.Uuid
-  environment       Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  environmentId String      @db.Uuid
+  environment   Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
 
-  // ---- User-entered fields ----
-  rawAssetName      String?     // optional friendly name, e.g. "Main Firewall"
-  rawDescription    String      // the messy input, e.g. "forti fg 60e main firewall"
+  // User-entered fields
+  name          String      // Asset name, e.g. "Main Firewall", "OpenSSL Server"
+  description   String?     // Optional description
 
-  // Optional: user can attach their own tags
-  tags              String[]    @default([])
+  // Domain classification
+  domain        AssetDomain @default(UNKNOWN)
 
-  // ---- Normalized identity (from Gemini/LLM extraction) ----
-  domain            AssetDomain @default(UNKNOWN)
+  // CPEs selected by user with full metadata (score, breakdown, cpeNameId)
+  // JSON array of: { cpeName, cpeNameId, title, score, breakdown: { vendor, product, version, tokenOverlap } }
+  cpes          Json        @default("[]")
 
-  vendorName        String?     // e.g. "fortinet", "siemens", "microsoft"
-  productName       String?     // e.g. "fortigate", "windows_server", "ignition"
-  productFamily     String?     // OT-friendly: "simatic_s7_1500", "control_logix"
-  modelIdentifier   String?     // e.g. "60e", "cpu1511-1pn", "pa-220"
-  operatingSystem   String?     // e.g. "windows", "ubuntu", "rhel"
+  // Optional tags for organization
+  tags          String[]    @default([])
 
-  softwareVersion   String?     // IT software/service version, e.g. "2.4.58"
-  firmwareVersion   String?     // OT firmware version, e.g. "2.8"
-  assetRole         String?     // keep as string for now: "firewall", "plc", "hmi", "server", etc.
-
-  // ---- NVD matching summary fields ----
-  bestMatchedCpe    String?     // top CPE you picked (if any) this will be a list of multple CPEs -----------------------TODO
-  matchMethod       MatchMethod @default(NONE) // sometimes certain assets dont have cpes, so we store as keyword search
-
-  // Pipeline confidence (0..1) from your scoring
-  normalizationConf Float?      @db.Real
-
-  // When you last ran analysis against NVD
-  lastAnalyzedAgainstNvd    DateTime?
-
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-
-  analyses          AssetAnalysis[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   @@index([environmentId])
   @@index([domain])
-  @@index([vendorName, productName])
-  @@index([bestMatchedCpe])
 }
-
-
-//
-// AssetAnalysis
-// Each time you run your pipeline (normalize → discover CPE → query NVD CVEs),
-// write one row. This gives you history and evaluation data.
-//
-
-model AssetAnalysis {
-  id                 String      @id @default(uuid()) @db.Uuid
-
-  assetId            String      @db.Uuid
-  asset              Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
-
-  // The original prompt input you analyzed (so you can reproduce runs)
-  inputText          String
-
-  // ---- Output snapshots (store as JSON to stay flexible) ----
-  extractedIdentity  Json        // Gemini extraction (vendor/product/model/version/role/evidence)
-  cpeCandidates      Json?       // list of {cpeName, confidence, title, evidence}
-  nvdQuery           Json?       // store query params used (cpeName or keywordSearch, pagination, etc.)
-
-  // Store CVEs (either full CVE objects or just ids + key fields)
-  nvdCveResults      Json?
-
-  // Summary fields for easy filtering/metrics
-  matchMethod        MatchMethod @default(NONE)
-  topCpeConfidence   Float?      @db.Real
-  cveCount           Int         @default(0)
-
-  createdAt          DateTime    @default(now())
-
-  @@index([assetId])
-  @@index([createdAt])
-  @@index([matchMethod])
-}
-
-

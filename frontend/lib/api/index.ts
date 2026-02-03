@@ -8,3 +8,4 @@ export * from "./client";
 export * from "./auth";
 export * from "./environments";
 export * from "./health";
+export * from "./assets";

@@ -44,6 +44,7 @@ export function UserProvider({
       const result = await response.json();
       if (result.success) {
         setUser(null);
+        window.location.href = '/';
       }
     } catch (error) {
       console.error('Logout error:', error);

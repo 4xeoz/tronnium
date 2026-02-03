@@ -1,6 +1,7 @@
 import { Router } from "express";
-import { cpeFindHandler, cpeValidateHandler } from "../controllers/asset.controller";
+import { cpeFindHandler, cpeValidateHandler, createAssetHandler, getAssetsHandler } from "../controllers/asset.controller";
 import { logRequest } from "../middleware/logger";
+import { jwtAuthGuard } from "../auth/passport";
 
 export const assetRouter = Router();
 
@@ -30,3 +31,13 @@ assetRouter.post("/cpe/find", logRequest(), cpeFindHandler);
 // Validate a CPE string against NVD database
 // Checks both format validity and existence in NVD
 assetRouter.post("/cpe/validate", logRequest(), cpeValidateHandler);
+
+// ============================================================================
+// ASSET CRUD ROUTES (Requires Authentication)
+// ============================================================================
+
+// GET /assets/:environmentId - Get all assets for an environment
+assetRouter.get("/:environmentId", jwtAuthGuard(), logRequest(), getAssetsHandler);
+
+// POST /assets/:environmentId - Create a new asset in an environment
+assetRouter.post("/:environmentId", jwtAuthGuard(), logRequest(), createAssetHandler);
