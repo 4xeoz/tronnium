@@ -1,32 +1,31 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { fetchUser, type UserResponse } from './backend';
-import { fetchUserServerSide } from './UserSessionClient';
-
-
-type User = UserResponse | null;
+import { getCurrentUser, type User } from './api';
 
 interface UserContextType {
-  user: User;
+  user: User | null;
   loading: boolean;
   refetchUser: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
-
-
-
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-export function UserProvider({ initUser, children }: { initUser : User,  children: ReactNode }) {
-  const [user, setUser] = useState<UserResponse | null>(initUser || null);
-  const [loading, setLoading] = useState(true);
+export function UserProvider({ 
+  initialUser, 
+  children 
+}: { 
+  initialUser?: User | null;  
+  children: ReactNode;
+}) {
+  const [user, setUser] = useState<User | null>(initialUser ?? null);
+  const [loading, setLoading] = useState(!initialUser);
 
   const refetchUser = async () => {
     setLoading(true);
     try {
-      const userData = await fetchUserServerSide();
+      const userData = await getCurrentUser();
       setUser(userData);
     } catch (error) {
       console.error('Failed to fetch user:', error);
@@ -45,23 +44,17 @@ export function UserProvider({ initUser, children }: { initUser : User,  childre
       const result = await response.json();
       if (result.success) {
         setUser(null);
-      } else {
-        console.error('Logout failed:', result.error);
-        // Optionally, show an error to the user
       }
     } catch (error) {
-      console.error('Logout network error:', error);
-      // Optionally, set user to null anyway or handle error
+      console.error('Logout error:', error);
     }
   };
 
   useEffect(() => {
-    if (!initUser) {
+    if (!initialUser) {
       refetchUser();
-    } else {
-      setLoading(false);
     }
-  }, []);
+  }, [initialUser]);
 
   return (
     <UserContext.Provider value={{ user, loading, refetchUser, logout }}>
@@ -72,7 +65,7 @@ export function UserProvider({ initUser, children }: { initUser : User,  childre
 
 export function useUser() {
   const context = useContext(UserContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useUser must be used within a UserProvider');
   }
   return context;

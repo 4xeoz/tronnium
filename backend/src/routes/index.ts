@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authRouter } from "./auth.routes";
 import { healthRouter } from "./health.routes";
 import { assetRouter } from "./asset.routes";
+import environmentRouter from "./environment.routes";
 
 export const apiRouter = Router();
 
@@ -12,3 +13,4 @@ apiRouter.get("/", (_req, res) => {
 apiRouter.use("/health", healthRouter);
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/assets", assetRouter);
+apiRouter.use("/environments", environmentRouter);

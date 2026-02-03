@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { UserProvider } from "@/lib/UserContext";
-import { fetchUserServerSide, fetchUserServerSideAPIREQUEST } from "@/lib/UserSessionClient";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,24 +15,18 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Tronnium",
-  description: "Frontend for the Tronnium platform",
+  description: "Security platform for modern infrastructure",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-
-  const user = await fetchUserServerSide();
-  console.log("RootLayout fetched user:", user);
-
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <UserProvider initUser={user}>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <UserProvider>
           {children}
         </UserProvider>
       </body>

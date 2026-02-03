@@ -35,8 +35,8 @@ res.cookie("token", token, {
   // do NOT set domain: 'localhost' for local dev
 });
 
-  // Redirect to frontend
-  return res.redirect(appConfig.frontendUrl);
+  // Redirect to frontend environments page
+  return res.redirect(`${appConfig.frontendUrl}/environments`);
 }
 
 export function profileHandler(req: Request, res: Response) {
@@ -51,6 +51,7 @@ export function profileHandler(req: Request, res: Response) {
     email: user.email,
     name: user.name,
     role: user.role,
+    avatarUrl: user.avatarUrl,
   });
 }
 

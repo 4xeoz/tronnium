@@ -1,15 +1,12 @@
 // app/api/logout/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getBackendUrl } from "@/lib/backend";
+import { getBackendUrl } from "@/lib/api";
 
 export async function POST(request: NextRequest) {
   try {
-
-    console.log("Logout API route called");
     const backendUrl = getBackendUrl();
     
     // Forward the request to the backend logout endpoint
-    // Note: credentials: "include" doesn't work server-side, so we manually forward cookies
     const response = await fetch(`${backendUrl}/auth/logout`, {
       method: "POST",
       headers: {
