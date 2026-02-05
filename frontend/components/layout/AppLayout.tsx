@@ -6,7 +6,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useUser } from "@/lib/UserContext";
 import ThemeToggle from "@/components/ui/ThemeToggle";
-import { FiBox, FiSettings, FiLogOut, FiBell, FiUser, FiArrowLeft } from "react-icons/fi";
+import { FiBox, FiSettings, FiLogOut, FiBell, FiUser, FiArrowLeft, FiMap, FiGrid } from "react-icons/fi";
 
 interface AppLayoutProps {
     children: React.ReactNode;
@@ -60,8 +60,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
     const router = useRouter();
     const { user, loading, logout } = useUser();
 
-    const isInEnvironment = pathname.match(/\/environments\/[^/]+/);
     const isEnvironmentsList = pathname === "/environments";
+    
+    // Extract environment ID for dynamic navigation
+    const envMatch = pathname.match(/\/environments\/([^/]+)/);
+    const envId = envMatch ? envMatch[1] : null;
+    
+    // Check which environment sub-page we're on
+    const isInEnvironment = !!envId;
+    const isInDashboard = pathname.endsWith("/dashboard");
+    const isInMap = pathname.endsWith("/map");
 
     // Redirect to home if not authenticated
     useEffect(() => {
@@ -87,7 +95,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     return (
         <div className="h-[calc(100vh)] bg-background-secondary flex">
             {/* Sidebar */}
-            <aside className="w-16 flex flex-col items-center py-4 gap-4">
+            <aside className="w-16 flex flex-col items-center py-4 gap-4 border-r border-border bg-surface">
                 {/* Logo */}
                 <Link href="/environments" className="relative w-10 h-10 rounded-full overflow-hidden">
                     <Image
@@ -107,15 +115,33 @@ export default function AppLayout({ children }: AppLayoutProps) {
                         <NavButton 
                             href="/environments" 
                             icon={FiArrowLeft} 
-                            title="Back" 
+                            title="Back to Environments" 
                         />
                     )}
-                    <NavButton 
-                        href="/environments" 
-                        icon={FiBox} 
-                        title="Environments" 
-                        isActive={isEnvironmentsList}
-                    />
+                    {isInEnvironment && envId && (
+                        <>
+                            <NavButton 
+                                href={`/environments/${envId}/dashboard`}
+                                icon={FiGrid} 
+                                title="Dashboard"
+                                isActive={isInDashboard}
+                            />
+                            <NavButton 
+                                href={`/environments/${envId}/map`}
+                                icon={FiMap} 
+                                title="Map View"
+                                isActive={isInMap}
+                            />
+                        </>
+                    )}
+                    {!isInEnvironment && (
+                        <NavButton 
+                            href="/environments" 
+                            icon={FiBox} 
+                            title="Environments" 
+                            isActive={isEnvironmentsList}
+                        />
+                    )}
                     <NavButton 
                         href="/settings" 
                         icon={FiSettings} 
@@ -128,9 +154,20 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <div className="flex flex-col items-center gap-2">
                     <NavButton icon={FiBell} title="Notifications" />
                     
+                    
+
+                    <Tooltip text="Logout">
+                        <button 
+                            onClick={logout}
+                            className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-error-bg transition-colors group"
+                        >
+                            <FiLogOut className="w-5 h-5 text-text-secondary group-hover:text-error-text" />
+                        </button>
+                    </Tooltip>
+
                     {/* User Avatar */}
                     <Tooltip text={user?.name || "Profile"}>
-                        <div className="relative w-10 h-10 rounded-full bg-brand-1 flex items-center justify-center overflow-hidden">
+                        <div className="relative w-10 h-10 rounded-full bg-brand-1 flex items-center justify-center overflow-hidden border-brand-2 border-4">
                             {user?.avatarUrl ? (
                                 <Image
                                     src={user.avatarUrl}
@@ -143,20 +180,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
                             )}
                         </div>
                     </Tooltip>
-
-                    <Tooltip text="Logout">
-                        <button 
-                            onClick={logout}
-                            className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-error-bg transition-colors group"
-                        >
-                            <FiLogOut className="w-5 h-5 text-text-secondary group-hover:text-error-text" />
-                        </button>
-                    </Tooltip>
                 </div>
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 bg-surface rounded-l-3xl overflow-auto">
+            <main className="flex-1 bg-surface overflow-auto">
                 {children}
             </main>
         </div>

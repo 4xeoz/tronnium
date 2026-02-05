@@ -10,7 +10,16 @@ export type Asset = {
   environmentId: string;
   name: string;
   description: string | null;
+  type: string;
   domain: "IT" | "OT" | "UNKNOWN";
+  x: number | null;
+  y: number | null;
+  status: string | null;
+  location: string | null;
+  ipAddress: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  serialNumber: string | null;
   cpes: CpeCandidate[];  // Full CPE data with scores and breakdown
   tags: string[];
   createdAt: string;
@@ -22,6 +31,9 @@ export type CpeCandidate = {
   cpeNameId: string;
   title: string;
   score: number;
+  vendor: string;
+  product: string;
+  version: string;
   breakdown: {
     vendor: number;
     product: number;
@@ -65,6 +77,13 @@ export type CpeValidateResponse = {
 export type CreateAssetInput = {
   name: string;
   description?: string;
+  type?: string;
+  status?: string;
+  location?: string;
+  ipAddress?: string;
+  manufacturer?: string;
+  model?: string;
+  serialNumber?: string;
   cpes?: CpeCandidate[];  // Full CPE data with scores and breakdown
   domain?: "IT" | "OT" | "UNKNOWN";
 };

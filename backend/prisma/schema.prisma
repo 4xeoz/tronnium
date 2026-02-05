@@ -93,9 +93,24 @@ model Asset {
   // User-entered fields
   name          String      // Asset name, e.g. "Main Firewall", "OpenSSL Server"
   description   String?     // Optional description
+  
+  // Asset type for visualization and categorization
+  type          String      @default("unknown") // e.g., "server", "database", "network", "firewall", "iot"
 
   // Domain classification
   domain        AssetDomain @default(UNKNOWN)
+
+  // Map visualization coordinates
+  x             Float?      // X coordinate for map canvas positioning
+  y             Float?      // Y coordinate for map canvas positioning
+
+  // Asset metadata
+  status        String?     // e.g., "active", "inactive", "maintenance", "decommissioned"
+  location      String?     // Physical or logical location, e.g., "Data Center 1", "Cloud-US-East"
+  ipAddress     String?     // IP address for network-connected assets
+  manufacturer  String?     // Manufacturer/vendor name
+  model         String?     // Model name or number
+  serialNumber  String?     // Serial number or asset tag
 
   // CPEs selected by user with full metadata (score, breakdown, cpeNameId)
   // JSON array of: { cpeName, cpeNameId, title, score, breakdown: { vendor, product, version, tokenOverlap } }
@@ -109,4 +124,6 @@ model Asset {
 
   @@index([environmentId])
   @@index([domain])
+  @@index([type])
+  @@index([status])
 }

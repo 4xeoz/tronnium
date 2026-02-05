@@ -32,6 +32,10 @@ export default function AddAssetSlideOver({
   const [assetName, setAssetName] = useState("");
   const [cpeInput, setCpeInput] = useState("");
   const [description, setDescription] = useState("");
+  const [type, setType] = useState("unknown");
+  const [status, setStatus] = useState("active");
+  const [location, setLocation] = useState("");
+  const [ipAddress, setIpAddress] = useState("");
 
   // Search results state
   const [candidates, setCandidates] = useState<CpeCandidate[]>([]);
@@ -53,6 +57,10 @@ export default function AddAssetSlideOver({
     setAssetName("");
     setCpeInput("");
     setDescription("");
+    setType("unknown");
+    setStatus("active");
+    setLocation("");
+    setIpAddress("");
     setCandidates([]);
     setSelectedCpes([]);
     setError(null);
@@ -139,9 +147,18 @@ export default function AddAssetSlideOver({
     setIsCreating(true);
 
     try {
+      // Extract vendor/product/model from first CPE if available
+      const firstCpe = selectedCpes[0];
+      
       const data: CreateAssetInput = {
         name: assetName.trim() || cpeInput.trim(),
         description: description.trim() || undefined,
+        type: type || undefined,
+        status: status || undefined,
+        location: location.trim() || undefined,
+        ipAddress: ipAddress.trim() || undefined,
+        manufacturer: firstCpe?.vendor || undefined,
+        model: firstCpe?.product || undefined,
         cpes: selectedCpes.length > 0 ? selectedCpes : undefined,
       };
 
@@ -274,6 +291,60 @@ export default function AddAssetSlideOver({
                         className="w-full px-4 py-3 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent resize-none"
                       />
                     </div>
+
+                    {/* Additional Fields */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-text-primary mb-2">Type</label>
+                        <select
+                          value={type}
+                          onChange={(e) => setType(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-1"
+                        >
+                          <option value="unknown">Unknown</option>
+                          <option value="server">Server</option>
+                          <option value="database">Database</option>
+                          <option value="network">Network</option>
+                          <option value="firewall">Firewall</option>
+                          <option value="iot">IoT Device</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-text-primary mb-2">Status</label>
+                        <select
+                          value={status}
+                          onChange={(e) => setStatus(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-1"
+                        >
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                          <option value="maintenance">Maintenance</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-text-primary mb-2">Location</label>
+                        <input
+                          type="text"
+                          value={location}
+                          onChange={(e) => setLocation(e.target.value)}
+                          placeholder="e.g., Data Center 1"
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-text-primary mb-2">IP Address</label>
+                        <input
+                          type="text"
+                          value={ipAddress}
+                          onChange={(e) => setIpAddress(e.target.value)}
+                          placeholder="e.g., 192.168.1.1"
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1"
+                        />
+                      </div>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -376,6 +447,9 @@ export default function AddAssetSlideOver({
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-text-primary text-sm">
                               {candidate.title}
+                            </div>
+                            <div className="text-xs text-text-secondary mt-1">
+                              {candidate.vendor} • {candidate.product} • {candidate.version}
                             </div>
                             <div className="text-xs text-text-muted font-mono mt-1 truncate">
                               {candidate.cpeName}

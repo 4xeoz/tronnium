@@ -101,6 +101,9 @@ export async function cpeFindHandler(req: Request, res: Response) {
                 cpeNameId: candidate.cpeNameId,
                 title: candidate.title,
                 score: candidate.score,
+                vendor: candidate.deconstructed.vendor,
+                product: candidate.deconstructed.product,
+                version: candidate.deconstructed.version,
                 breakdown: {
                     vendor: Math.round(candidate.breakdown.vendorScore * 100),
                     product: Math.round(candidate.breakdown.productScore * 100),
@@ -328,7 +331,7 @@ export async function createAssetHandler(req: Request, res: Response) {
     try {
         const { environmentId } = req.params;
         const user = req.user as AuthenticatedUser;
-        const { name, description, cpes, domain } = req.body;
+        const { name, description, cpes, domain, type, status, location, ipAddress, manufacturer, model, serialNumber } = req.body;
 
         // Validate input
         if (!name || typeof name !== "string") {
@@ -372,7 +375,14 @@ export async function createAssetHandler(req: Request, res: Response) {
                 environmentId,
                 name: name.trim(),
                 description: description?.trim() || null,
+                type: type?.trim() || "unknown",
                 domain: domain || "UNKNOWN",
+                status: status?.trim() || null,
+                location: location?.trim() || null,
+                ipAddress: ipAddress?.trim() || null,
+                manufacturer: manufacturer?.trim() || null,
+                model: model?.trim() || null,
+                serialNumber: serialNumber?.trim() || null,
                 cpes: selectedCpes,  // Stored as JSON
             },
         });
