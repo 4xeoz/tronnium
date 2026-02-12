@@ -34,6 +34,7 @@
   --info-bg: #EFF6FF;
   --info-border: #BFDBFE;
   --info-text: #2563EB;
+
   
   /* Status indicators */
   --status-active: #10B981;
@@ -69,7 +70,7 @@
   --success-bg: #14191A;
   --success-border: #166534;
   --success-text: #86EFAC;
-  --warning-bg: #1A1814;
+  --warning-bg: #1a1414;
   --warning-border: #854D0E;
   --warning-text: #FCD34D;
   --info-bg: #14161C;

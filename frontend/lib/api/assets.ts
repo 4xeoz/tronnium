@@ -2,6 +2,7 @@
  * Asset API - CRUD operations for assets and CPE discovery
  */
 
+import { env } from "process";
 import { apiFetch } from "./client";
 
 // Types
@@ -139,3 +140,22 @@ export async function createAsset(
   );
   return response.asset;
 }
+
+
+export async function deleteAsset(
+  assetId: string,
+  environmentId: string
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(
+    `/assets/${environmentId}/${assetId}/delete`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+
+    }
+
+  );
+  
+}
+    
+

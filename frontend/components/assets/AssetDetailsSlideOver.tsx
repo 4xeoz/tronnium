@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { FiX, FiCpu, FiTag, FiCalendar, FiCheck, FiBox } from "react-icons/fi";
 import type { Asset, CpeCandidate } from "@/lib/api";
+import { deleteAsset } from "@/lib/api/assets";
 
 interface AssetDetailsSlideOverProps {
   asset: Asset | null;
@@ -108,6 +109,22 @@ export default function AssetDetailsSlideOver({
       return () => clearTimeout(timer);
     }
   }, [isOpen]);
+
+  // Handle asset deletion
+const handleAssetDelete = () => {
+  if (!displayedAsset) return;
+
+  deleteAsset(displayedAsset.id, displayedAsset.environmentId)
+    .then(() => {
+      onClose();
+    })
+    .catch((error) => {
+      console.error("Failed to delete asset:", error);
+      console.error("Error response:", error.response?.data);
+      console.error("Error status:", error.response?.status);
+      alert("Failed to delete asset. Please try again.");
+    });
+};
 
   const currentAsset = displayedAsset;
   const cpeList = currentAsset && Array.isArray(currentAsset.cpes) ? currentAsset.cpes : [];
@@ -259,9 +276,10 @@ export default function AssetDetailsSlideOver({
                 Close
               </button>
               <button
-                className="flex-1 px-4 py-3 rounded-lg bg-brand-1 text-brand-2 font-medium hover:bg-brand-1/90 transition-colors"
+                onClick={handleAssetDelete}
+                className="flex-1 px-4 py-3 rounded-lg bg-[var(--warning-text)] font-medium transition-colors text-[var(--warning-bg)]"
               >
-                Edit Asset
+                Delete Asset
               </button>
             </div>
           </div>
