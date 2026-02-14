@@ -6,7 +6,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useUser } from "@/lib/UserContext";
 import ThemeToggle from "@/components/ui/ThemeToggle";
-import { FiBox, FiSettings, FiLogOut, FiBell, FiUser, FiArrowLeft, FiMap, FiGrid } from "react-icons/fi";
+import { FiBox, FiSettings, FiLogOut, FiBell, FiUser, FiArrowLeft, FiMap, FiGrid, FiShield } from "react-icons/fi";
 
 interface AppLayoutProps {
     children: React.ReactNode;
@@ -120,17 +120,22 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     )}
                     {isInEnvironment && envId && (
                         <>
-                            <NavButton 
+                            <NavButton
                                 href={`/environments/${envId}/dashboard`}
-                                icon={FiGrid} 
+                                icon={FiGrid}
                                 title="Dashboard"
                                 isActive={isInDashboard}
                             />
-                            <NavButton 
+                            <NavButton
                                 href={`/environments/${envId}/map`}
-                                icon={FiMap} 
+                                icon={FiMap}
                                 title="Map View"
                                 isActive={isInMap}
+                            />
+                            <NavButton
+                                href={`/environments/${envId}/dashboard?tab=security`}
+                                icon={FiShield}
+                                title="Security"
                             />
                         </>
                     )}
