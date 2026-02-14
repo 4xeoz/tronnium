@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { FiX, FiSearch, FiCheck, FiAlertCircle, FiLoader } from "react-icons/fi";
+import { motion, AnimatePresence } from "motion/react";
 import {
   findCpe,
   validateCpe,
@@ -10,6 +11,26 @@ import {
   type CpeCandidate,
   type CreateAssetInput,
 } from "@/lib/api";
+
+// Pipeline phases for the step indicator
+const PIPELINE_PHASES = ["Parse", "Search NVD", "Score", "Rank"] as const;
+
+function stepToPhaseIndex(step: string): number {
+  switch (step) {
+    case "parsing":
+      return 0;
+    case "searching":
+    case "waiting":
+    case "narrowing":
+      return 1;
+    case "scoring":
+      return 2;
+    case "ranking":
+      return 3;
+    default:
+      return 0;
+  }
+}
 
 interface AddAssetSlideOverProps {
   isOpen: boolean;
@@ -103,6 +124,7 @@ export default function AddAssetSlideOver({
 
   // Add ref to track EventSource
   const eventSourceRef = useRef<EventSource | null>(null);
+  const progressEndRef = useRef<HTMLDivElement | null>(null);
 
   // Cleanup EventSource when component unmounts or closes
   useEffect(() => {
@@ -113,6 +135,11 @@ export default function AddAssetSlideOver({
       }
     };
   }, []);
+
+  // Auto-scroll progress feed
+  useEffect(() => {
+    progressEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [progressMessages]);
 
   // Also cleanup when slide-over closes
   useEffect(() => {
@@ -350,31 +377,95 @@ export default function AddAssetSlideOver({
                     </div>
 
                     {/* Progress Feed — shown while searching */}
-                    {isSearching && progressMessages.length > 0 && (
-                      <div className="rounded-lg border border-border bg-surface-secondary p-4 space-y-2">
-                        <div className="flex items-center gap-2 mb-1">
-                          <FiLoader className="w-4 h-4 animate-spin text-brand-1" />
-                          <span className="text-sm font-medium text-text-primary">
-                            Searching...
-                          </span>
-                        </div>
-                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                          {progressMessages.map((msg, i) => (
-                            <div
-                              key={i}
-                              className={`text-xs flex items-start gap-2 ${
-                                i === progressMessages.length - 1
-                                  ? "text-text-primary"
-                                  : "text-text-muted"
-                              }`}
-                            >
-                              <span className="shrink-0 mt-0.5 w-1.5 h-1.5 rounded-full bg-current" />
-                              <span>{msg.message}</span>
+                    <AnimatePresence>
+                      {isSearching && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.3, ease: "easeOut" }}
+                          className="overflow-hidden"
+                        >
+                          <div className="rounded-lg border border-border bg-surface-secondary p-4 space-y-4">
+                            {/* Pipeline stepper */}
+                            <div className="flex items-center gap-1">
+                              {PIPELINE_PHASES.map((phase, i) => {
+                                const currentPhase = progressMessages.length > 0
+                                  ? stepToPhaseIndex(progressMessages[progressMessages.length - 1].step)
+                                  : -1;
+                                const isDone = i < currentPhase;
+                                const isActive = i === currentPhase;
+
+                                return (
+                                  <div key={phase} className="flex items-center flex-1 last:flex-initial">
+                                    <div className="flex flex-col items-center gap-1">
+                                      <motion.div
+                                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium border-2 transition-colors ${
+                                          isDone
+                                            ? "bg-brand-1 border-brand-1 text-brand-2"
+                                            : isActive
+                                            ? "border-brand-1 text-brand-1 bg-brand-1/10"
+                                            : "border-border text-text-muted bg-surface"
+                                        }`}
+                                        animate={isActive ? { scale: [1, 1.15, 1] } : {}}
+                                        transition={isActive ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" } : {}}
+                                      >
+                                        {isDone ? (
+                                          <FiCheck className="w-3.5 h-3.5" />
+                                        ) : (
+                                          <span>{i + 1}</span>
+                                        )}
+                                      </motion.div>
+                                      <span className={`text-[10px] font-medium whitespace-nowrap ${
+                                        isDone || isActive ? "text-text-primary" : "text-text-muted"
+                                      }`}>
+                                        {phase}
+                                      </span>
+                                    </div>
+                                    {i < PIPELINE_PHASES.length - 1 && (
+                                      <div className="flex-1 h-0.5 mx-1 mb-4 rounded-full overflow-hidden bg-border">
+                                        <motion.div
+                                          className="h-full bg-brand-1"
+                                          initial={{ width: "0%" }}
+                                          animate={{ width: isDone ? "100%" : isActive ? "50%" : "0%" }}
+                                          transition={{ duration: 0.4, ease: "easeOut" }}
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+
+                            {/* Message log */}
+                            <div className="space-y-1 max-h-36 overflow-y-auto">
+                              <AnimatePresence initial={false}>
+                                {progressMessages.map((msg, i) => (
+                                  <motion.div
+                                    key={i}
+                                    initial={{ opacity: 0, x: -12 }}
+                                    animate={{
+                                      opacity: i === progressMessages.length - 1 ? 1 : 0.5,
+                                      x: 0,
+                                    }}
+                                    transition={{ duration: 0.25, ease: "easeOut" }}
+                                    className="text-xs flex items-start gap-2 text-text-secondary"
+                                  >
+                                    {i === progressMessages.length - 1 ? (
+                                      <FiLoader className="w-3 h-3 mt-0.5 shrink-0 animate-spin text-brand-1" />
+                                    ) : (
+                                      <FiCheck className="w-3 h-3 mt-0.5 shrink-0 text-text-muted" />
+                                    )}
+                                    <span>{msg.message}</span>
+                                  </motion.div>
+                                ))}
+                              </AnimatePresence>
+                              <div ref={progressEndRef} />
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
                     {/* Rest of fields hidden during search to reduce noise */}
                     {!isSearching && (
