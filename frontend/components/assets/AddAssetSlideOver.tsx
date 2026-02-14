@@ -77,6 +77,8 @@ export default function AddAssetSlideOver({
   const [progressMessages, setProgressMessages] = useState<
     { step: string; message: string }[]
   >([]);
+  const [pipelineComplete, setPipelineComplete] = useState(false);
+  const [showPipelineLog, setShowPipelineLog] = useState(false);
 
   const resetForm = () => {
     setSearchMode("name");
@@ -93,6 +95,8 @@ export default function AddAssetSlideOver({
     setError(null);
     setValidationResult(null);
     setProgressMessages([]);
+    setPipelineComplete(false);
+    setShowPipelineLog(false);
   };
 
   const handleClose = () => {
@@ -160,6 +164,8 @@ export default function AddAssetSlideOver({
     setError(null);
     setIsSearching(true);
     setProgressMessages([]);
+    setPipelineComplete(false);
+    setShowPipelineLog(false);
 
     eventSourceRef.current = listenForCpeFindProgress(
       assetName.trim(),
@@ -168,20 +174,24 @@ export default function AddAssetSlideOver({
         setProgressMessages((prev) => [...prev, update]);
       },
       (result) => {
+        setIsSearching(false);
+        setPipelineComplete(true);
         if (result.success && result.candidates.length > 0) {
           setCandidates(result.candidates);
           setStep("select");
         } else {
           setError("No CPE candidates found. Try a different search term.");
+          // Clear on failure — nothing useful to show
+          setProgressMessages([]);
+          setPipelineComplete(false);
         }
-        setIsSearching(false);
-        setProgressMessages([]);
         eventSourceRef.current = null;
       },
       (err) => {
         setError(err);
         setIsSearching(false);
         setProgressMessages([]);
+        setPipelineComplete(false);
         eventSourceRef.current = null;
       }
     );
@@ -619,7 +629,72 @@ export default function AddAssetSlideOver({
             {/* Step 2: Select CPEs */}
             {step === "select" && (
               <div className="space-y-4">
-                <div className="text-sm text-text-secondary mb-4">
+                {/* Completed pipeline indicator */}
+                {pipelineComplete && progressMessages.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    className="rounded-lg border border-border bg-surface-secondary p-3"
+                  >
+                    {/* Compact stepper — all done */}
+                    <div className="flex items-center gap-1">
+                      {PIPELINE_PHASES.map((phase, i) => (
+                        <div key={phase} className="flex items-center flex-1 last:flex-initial">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <motion.div
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium border-2 bg-brand-1 border-brand-1 text-brand-2"
+                              initial={{ scale: 0.8 }}
+                              animate={{ scale: 1 }}
+                              transition={{ delay: i * 0.08, duration: 0.2 }}
+                            >
+                              <FiCheck className="w-3 h-3" />
+                            </motion.div>
+                            <span className="text-[9px] font-medium text-text-primary whitespace-nowrap">
+                              {phase}
+                            </span>
+                          </div>
+                          {i < PIPELINE_PHASES.length - 1 && (
+                            <div className="flex-1 h-0.5 mx-1 mb-3.5 rounded-full bg-brand-1" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Expandable log */}
+                    <button
+                      onClick={() => setShowPipelineLog((v) => !v)}
+                      className="mt-2 w-full text-[10px] text-text-muted hover:text-text-secondary transition-colors text-center"
+                    >
+                      {showPipelineLog ? "Hide details" : `Show pipeline details (${progressMessages.length} steps)`}
+                    </button>
+                    <AnimatePresence>
+                      {showPipelineLog && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-2 pt-2 border-t border-border space-y-1 max-h-32 overflow-y-auto">
+                            {progressMessages.map((msg, i) => (
+                              <div
+                                key={i}
+                                className="text-xs flex items-start gap-2 text-text-muted"
+                              >
+                                <FiCheck className="w-3 h-3 mt-0.5 shrink-0" />
+                                <span>{msg.message}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
+
+                <div className="text-sm text-text-secondary">
                   Found {candidates.length} CPE candidates for &quot;{assetName}&quot;.
                   Select the ones that match your asset:
                 </div>
@@ -722,6 +797,9 @@ export default function AddAssetSlideOver({
                       setStep("input");
                       setCandidates([]);
                       setSelectedCpes([]);
+                      setProgressMessages([]);
+                      setPipelineComplete(false);
+                      setShowPipelineLog(false);
                     }}
                     className="flex-1 px-4 py-3 rounded-lg border border-border text-text-secondary hover:bg-surface-secondary transition-colors"
                   >
