@@ -9,6 +9,7 @@ interface AssetDetailsSlideOverProps {
   asset: Asset | null;
   isOpen: boolean;
   onClose: () => void;
+  onAssetDeleted: (assetId: string) => void;
 }
 
 function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
@@ -89,6 +90,7 @@ export default function AssetDetailsSlideOver({
   asset,
   isOpen,
   onClose,
+  onAssetDeleted,
 }: AssetDetailsSlideOverProps) {
   // Keep the asset data while animating out
   const [displayedAsset, setDisplayedAsset] = useState<Asset | null>(null);
@@ -117,6 +119,7 @@ const handleAssetDelete = () => {
   deleteAsset(displayedAsset.id, displayedAsset.environmentId)
     .then(() => {
       onClose();
+      onAssetDeleted(displayedAsset.id);
     })
     .catch((error) => {
       console.error("Failed to delete asset:", error);

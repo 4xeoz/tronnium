@@ -281,6 +281,10 @@ export default function EnvironmentDashboardPage() {
         asset={selectedAsset}
         isOpen={selectedAsset !== null}
         onClose={() => setSelectedAsset(null)}
+        onAssetDeleted={(deletedAssetId) => {
+          setAssets((prevAssets) => prevAssets.filter(asset => asset.id !== deletedAssetId));
+          setSelectedAsset(null);
+        }}
       />
     </div>
   );

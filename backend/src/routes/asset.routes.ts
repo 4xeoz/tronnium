@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { cpeFindHandler, cpeValidateHandler, createAssetHandler, getAssetsHandler } from "../controllers/asset.controller";
+import { cpeFindHandler, cpeValidateHandler, createAssetHandler, deleteAssetHandler, getAssetsHandler } from "../controllers/asset.controller";
 import { logRequest } from "../middleware/logger";
 import { jwtAuthGuard } from "../auth/passport";
 
@@ -26,7 +26,7 @@ assetRouter.get("/test", logRequest(), (req, res) => {
 
 // Find and rank CPE candidates from human-readable asset name
 // Runs full pipeline: Parse → Search NVD → Rank & Score
-assetRouter.post("/cpe/find", logRequest(), cpeFindHandler);
+assetRouter.get("/cpe/find", logRequest(), cpeFindHandler);
 
 // Validate a CPE string against NVD database
 // Checks both format validity and existence in NVD
@@ -41,3 +41,6 @@ assetRouter.get("/:environmentId", jwtAuthGuard(), logRequest(), getAssetsHandle
 
 // POST /assets/:environmentId - Create a new asset in an environment
 assetRouter.post("/:environmentId", jwtAuthGuard(), logRequest(), createAssetHandler);
+
+// POST /assets/:environmentId/:assetId/delete - Delete an asset from an environment
+assetRouter.post("/:environmentId/:assetId/delete", jwtAuthGuard(), logRequest(), deleteAssetHandler);

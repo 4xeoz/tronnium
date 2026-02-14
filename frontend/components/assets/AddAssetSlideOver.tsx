@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { FiX, FiSearch, FiCheck, FiAlertCircle, FiLoader } from "react-icons/fi";
 import {
   findCpe,
   validateCpe,
   createAsset,
+  listenForCpeFindProgress,
   type CpeCandidate,
   type CreateAssetInput,
 } from "@/lib/api";
@@ -72,27 +73,85 @@ export default function AddAssetSlideOver({
     onClose();
   };
 
-  // Search by asset name
-  const handleSearchByName = async () => {
+  // // Search by asset name
+  // const handleSearchByName = async () => {
+  //   if (!assetName.trim()) return;
+
+  //   setError(null);
+  //   setIsSearching(true);
+
+  //   try {
+  //     const result = await findCpe(assetName.trim(), 10);
+  //     if (result.success && result.candidates.length > 0) {
+  //       setCandidates(result.candidates);
+  //       setStep("select");
+  //     } else {
+  //       setError("No CPE candidates found. Try a different search term.");
+  //     }
+  //   } catch (err) {
+  //     setError(err instanceof Error ? err.message : "Failed to search CPEs");
+  //   } finally {
+  //     setIsSearching(false);
+  //   }
+  // };
+
+  // Add ref to track EventSource
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Cleanup EventSource when component unmounts or closes
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, []);
+
+  // Also cleanup when slide-over closes
+  useEffect(() => {
+    if (!isOpen && eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+  }, [isOpen]);
+
+  const handleSearchByName = () => {
     if (!assetName.trim()) return;
+
+    // Close any existing connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
 
     setError(null);
     setIsSearching(true);
 
-    try {
-      const result = await findCpe(assetName.trim(), 10);
-      if (result.success && result.candidates.length > 0) {
-        setCandidates(result.candidates);
-        setStep("select");
-      } else {
-        setError("No CPE candidates found. Try a different search term.");
+    eventSourceRef.current = listenForCpeFindProgress(
+      assetName.trim(),
+      10,
+      (update) => {
+        console.log("Progress update:", update);
+        // Optionally display progress in UI
+      },
+      (result) => {
+        if (result.success && result.candidates.length > 0) {
+          setCandidates(result.candidates);
+          setStep("select");
+        } else {
+          setError("No CPE candidates found. Try a different search term.");
+        }
+        setIsSearching(false);
+        eventSourceRef.current = null;
+      },
+      (err) => {
+        setError(err);
+        setIsSearching(false);
+        eventSourceRef.current = null;
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to search CPEs");
-    } finally {
-      setIsSearching(false);
-    }
+    );
   };
+
 
   // Validate CPE string
   const handleValidateCpe = async () => {
@@ -116,6 +175,9 @@ export default function AddAssetSlideOver({
           cpeNameId: "",  // Not available for manual entry
           title: cpeInput.trim(),
           score: 100,  // Manual entry assumed to be exact match
+          vendor: result.parsed?.vendor || "",
+          product: result.parsed?.product || "",
+          version: result.parsed?.version || "",
           breakdown: { vendor: 100, product: 100, version: 100, tokenOverlap: 100 },
         };
         setSelectedCpes([manualCpe]);

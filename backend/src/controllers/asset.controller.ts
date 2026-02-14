@@ -3,7 +3,7 @@ import { cpe } from "../services/cpe";
 import { rankCpeCandidates } from "../services/cpeRankingEngine";
 import type { CpeCandidate } from "../types/cpe.types";
 import prisma from "../lib/prisma";
-import type { AuthenticatedUser } from "../types/express";
+import type { PublicUser } from "../types/express";
 
 // ============================================================================
 // CPE ENDPOINTS
@@ -53,15 +53,14 @@ import type { AuthenticatedUser } from "../types/express";
 
 export async function cpeFindHandler(req: Request, res: Response) {
     try {
-        const { assetName, topN } = req.body;
+        const { assetName, topN } = req.query;
 
         // Validate input
-        if (!assetName || typeof assetName !== 'string') {
-            return res.status(400).json({ 
+        if (!assetName || typeof assetName !== "string") {
+            return res.status(400).json({
                 success: false,
                 error: "INVALID_INPUT",
                 message: "assetName is required and must be a string",
-                example: { assetName: "OpenSSL 1.1.1", topN: 5 }
             });
         }
 
@@ -70,23 +69,40 @@ export async function cpeFindHandler(req: Request, res: Response) {
             return res.status(400).json({
                 success: false,
                 error: "INVALID_INPUT",
-                message: "assetName must be at least 2 characters long"
+                message: "assetName must be at least 2 characters long",
             });
         }
 
-        // Validate topN if provided
-        const resultLimit = topN && typeof topN === 'number' && topN > 0 ? Math.min(topN, 20) : 5;
+        const resultLimit = topN && !isNaN(Number(topN)) && Number(topN) > 0 
+            ? Math.min(Number(topN), 20) 
+            : 5;
+
+        // Set headers for SSE
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.flushHeaders(); // Important: flush headers immediately
+
+        // Helper function to send SSE updates
+        const sendProgress = (step: string, message: string, type: "progress" | "completed" | "error" = "progress", data?: any) => {
+            res.write(`data: ${JSON.stringify({ type, step, message, data })}\n\n`);
+        };
 
         // Phase 1 & 2: Parse asset and search NVD
         console.log(`[CPE Find] Processing: "${trimmedAssetName}"`);
+        sendProgress("parsing", "Parsing asset name and searching NVD for candidates...", "progress");
+        
         const { parsed, results } = await cpe.findCpe(trimmedAssetName);
 
         // Phase 3, 4, 5: Rank the CPE candidates
+        sendProgress("ranking", `Found ${results.length} candidates. Ranking and scoring...`, "progress");
+        
         const rankedCandidates: CpeCandidate[] = rankCpeCandidates(parsed, results, resultLimit);
 
         console.log(`[CPE Find] Found ${results.length} CPEs, returning top ${rankedCandidates.length} ranked candidates`);
 
-        return res.json({
+        // Send completed response
+        sendProgress("completed", "CPE search completed", "completed", {
             success: true,
             parsed: {
                 raw: parsed.raw,
@@ -94,9 +110,9 @@ export async function cpeFindHandler(req: Request, res: Response) {
                 vendor: parsed.vendor,
                 product: parsed.product,
                 version: parsed.version,
-                tokens: parsed.tokens
+                tokens: parsed.tokens,
             },
-            candidates: rankedCandidates.map(candidate => ({
+            candidates: rankedCandidates.map((candidate) => ({
                 cpeName: candidate.cpeName,
                 cpeNameId: candidate.cpeNameId,
                 title: candidate.title,
@@ -108,20 +124,18 @@ export async function cpeFindHandler(req: Request, res: Response) {
                     vendor: Math.round(candidate.breakdown.vendorScore * 100),
                     product: Math.round(candidate.breakdown.productScore * 100),
                     version: Math.round(candidate.breakdown.versionScore * 100),
-                    tokenOverlap: Math.round(candidate.breakdown.tokenOverlapScore * 100)
-                }
+                    tokenOverlap: Math.round(candidate.breakdown.tokenOverlapScore * 100),
+                },
             })),
             count: rankedCandidates.length,
-            totalFound: results.length
+            totalFound: results.length,
         });
-    } catch (error) {
+
+        res.end();
+    } catch (error: any) {
         console.error("[CPE Find] Error:", error);
-        return res.status(500).json({ 
-            success: false,
-            error: "SERVER_ERROR",
-            message: "Failed to find CPE candidates",
-            detail: process.env.NODE_ENV === 'development' ? String(error) : undefined
-        });
+        res.write(`data: ${JSON.stringify({ type: "error", step: "error", message: error.message || "An error occurred" })}\n\n`);
+        res.end();
     }
 }
 
@@ -177,7 +191,7 @@ export async function cpeValidateHandler(req: Request, res: Response) {
 
         // Validate input
         if (!cpeString || typeof cpeString !== 'string') {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 success: false,
                 error: "INVALID_INPUT",
                 message: "cpeString is required and must be a string",
@@ -231,7 +245,7 @@ export async function cpeValidateHandler(req: Request, res: Response) {
         });
     } catch (error) {
         console.error("[CPE Validate] Error:", error);
-        return res.status(500).json({ 
+        return res.status(500).json({
             success: false,
             error: "SERVER_ERROR",
             message: "Failed to validate CPE",
@@ -255,7 +269,7 @@ export async function cpeValidateHandler(req: Request, res: Response) {
 export async function getAssetsHandler(req: Request, res: Response) {
     try {
         const { environmentId } = req.params;
-        const user = req.user as AuthenticatedUser;
+        const user = req.user as PublicUser;
 
         // Verify environment belongs to user
         const environment = await prisma.environment.findFirst({
@@ -330,7 +344,7 @@ type CpeInput = {
 export async function createAssetHandler(req: Request, res: Response) {
     try {
         const { environmentId } = req.params;
-        const user = req.user as AuthenticatedUser;
+        const user = req.user as PublicUser;
         const { name, description, cpes, domain, type, status, location, ipAddress, manufacturer, model, serialNumber } = req.body;
 
         // Validate input
@@ -360,13 +374,13 @@ export async function createAssetHandler(req: Request, res: Response) {
 
         // CPEs are trusted since they were displayed by the backend and selected by user
         // Store full CPE objects with scores and breakdown
-        const selectedCpes: CpeInput[] = Array.isArray(cpes) 
-            ? cpes.filter((cpe: unknown): cpe is CpeInput => 
-                typeof cpe === 'object' && 
-                cpe !== null && 
-                'cpeName' in cpe && 
+        const selectedCpes: CpeInput[] = Array.isArray(cpes)
+            ? cpes.filter((cpe: unknown): cpe is CpeInput =>
+                typeof cpe === 'object' &&
+                cpe !== null &&
+                'cpeName' in cpe &&
                 typeof (cpe as CpeInput).cpeName === 'string'
-              )
+            )
             : [];
 
         // Create the asset
@@ -403,3 +417,73 @@ export async function createAssetHandler(req: Request, res: Response) {
         });
     }
 }
+
+export async function deleteAssetHandler(req: Request, res: Response) {
+    try {
+        const { environmentId, assetId } = req.params;
+        const user = req.user as PublicUser;
+
+        // validate input
+        if (!assetId || typeof assetId !== "string") {
+            return res.status(400).json({
+                success: false,
+                error: "INVALID_INPUT",
+                message: "assetId is required and must be a string",
+            });
+        }
+
+
+        // Verify environment belongs to user
+        const environment = await prisma.environment.findFirst({
+            where: {
+                id: environmentId,
+                ownerId: user.id,
+
+            }
+        });
+
+        if (!environment) {
+            return res.status(404).json({
+                success: false,
+                error: "NOT_FOUND",
+                message: "Environment not found",
+            });
+        }
+
+        // Verify asset belongs to environment
+        const asset = await prisma.asset.findFirst({
+            where: { 
+                id: assetId, 
+                environmentId: environmentId, 
+            },
+        }); 
+        
+        if (!asset) { 
+        
+            return res.status(404).json({ 
+                success: false, 
+                error: "NOT_FOUND", 
+                message: "Asset not found in this environment"
+            }); 
+        }
+
+        // Delete the Asset
+        await prisma.asset.delete({
+            where: { id: assetId },
+        });
+        return res.json({success: true, message: "Asset deleted successfully", });
+
+    } 
+    
+    catch (error) {
+        console.error("[Delete Asset] Error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "SERVER_ERROR",
+            message: "Failed to delete asset",
+            detail: process.env.NODE_ENV === "development" ? String(error) : undefined,
+        });
+    }
+}
+
+

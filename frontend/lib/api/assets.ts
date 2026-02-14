@@ -93,14 +93,62 @@ export type CreateAssetInput = {
 
 /**
  * Find CPE candidates from an asset name
+ * @deprecated Use listenForCpeFindProgress for real-time updates
  */
 export async function findCpe(assetName: string, topN: number = 5): Promise<CpeFindResponse> {
-  return apiFetch<CpeFindResponse>("/assets/cpe/find", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ assetName, topN }),
+  const params = new URLSearchParams({
+    assetName,
+    topN: topN.toString(),
+  });
+  return apiFetch<CpeFindResponse>(`/assets/cpe/find?${params.toString()}`, {
+    method: "GET",
   });
 }
+
+/**
+ * Listen for CPE find progress updates using SSE
+ */
+
+export function listenForCpeFindProgress(
+  assetName: string,
+  topN: number = 5,
+  onUpdate: (update: { step: string; message: string }) => void,
+  onComplete: (result: CpeFindResponse) => void,
+  onError: (error: string) => void
+): EventSource {
+  // Use the correct base URL (adjust based on your setup)
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+  const eventSource = new EventSource(
+    `${baseUrl}/assets/cpe/find?assetName=${encodeURIComponent(assetName)}&topN=${topN}`
+  );
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === "progress") {
+        onUpdate({ step: data.step || "Progress", message: data.message });
+      } else if (data.type === "completed") {
+        // Backend sends the result in data.data
+        onComplete(data.data);
+        eventSource.close();
+      } else if (data.type === "error") {
+        onError(data.message || "Unknown error");
+        eventSource.close();
+      }
+    } catch (parseError) {
+      console.error("Failed to parse SSE message:", parseError);
+    }
+  };
+
+  eventSource.onerror = () => {
+    onError("Connection error. Please try again.");
+    eventSource.close();
+  };
+
+  return eventSource;
+}
+
+
 
 /**
  * Validate a CPE string
@@ -155,7 +203,7 @@ export async function deleteAsset(
     }
 
   );
-  
+
 }
     
 
