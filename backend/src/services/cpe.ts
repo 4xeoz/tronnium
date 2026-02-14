@@ -31,22 +31,25 @@ const NON_VENDOR_WORDS: Set<string> = new Set([
     'standard', 'edition', 'version', 'update', 'patch', 'release',
 ]);
 
+export type ProgressCallback = (step: string, message: string) => void;
+
 class Cpe {
     // Simple in-memory cache for API responses
     private cache: Map<string, { data: any; timestamp: number }> = new Map();
     private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-    
+
     // Rate limiting: NVD allows ~5 requests per 30 seconds without API key
     private lastRequestTime = 0;
     private readonly MIN_REQUEST_INTERVAL_MS = 6000; // 6 seconds between requests
 
-    private async queryNvdApi(cpe: string, keyword: string): Promise<any> {
+    private async queryNvdApi(cpe: string, keyword: string, onProgress?: ProgressCallback): Promise<any> {
         const cacheKey = `cpe:${cpe}|kw:${keyword}`;
         
         // Check cache first
         const cached = this.cache.get(cacheKey);
         if (cached && Date.now() - cached.timestamp < this.CACHE_TTL_MS) {
             console.log(`[NVD API] Cache hit for: "${keyword || cpe}"`);
+            onProgress?.("searching", `Cache hit for "${keyword || cpe}"`);
             return cached.data;
         }
 
@@ -56,6 +59,7 @@ class Cpe {
         if (timeSinceLastRequest < this.MIN_REQUEST_INTERVAL_MS) {
             const waitTime = this.MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
             console.log(`[NVD API] Rate limiting, waiting ${waitTime}ms...`);
+            onProgress?.("waiting", `Rate limit: waiting ${Math.ceil(waitTime / 1000)}s before next NVD query...`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
         }
         this.lastRequestTime = Date.now();
@@ -70,6 +74,7 @@ class Cpe {
         }
 
         console.log(`[NVD API] Fetching: "${keyword || cpe}"`);
+        onProgress?.("searching", `Querying NVD for "${keyword || cpe}"...`);
         const response = await axios.get(url);
         
         // Cache the result
@@ -342,7 +347,7 @@ class Cpe {
     // }
     // ```
 
-    public async progressiveSearch(parsedAsset: ParsedAsset): Promise<CpeProduct[]> {
+    public async progressiveSearch(parsedAsset: ParsedAsset, onProgress?: ProgressCallback): Promise<CpeProduct[]> {
         // Build smart search queries
         const vendor = parsedAsset.vendor || '';
         const product = parsedAsset.product || '';
@@ -355,17 +360,20 @@ class Cpe {
         
         if (!baseQuery) {
             console.log(`[Progressive Search] No vendor/product extracted, using raw input`);
-            return (await this.queryNvdApi('', parsedAsset.raw)).products || [];
+            onProgress?.("searching", `No vendor/product extracted, searching NVD with raw input...`);
+            return (await this.queryNvdApi('', parsedAsset.raw, onProgress)).products || [];
         }
 
         console.log(`[Progressive Search] Starting with base query: "${baseQuery}"`);
-        let search1Data = await this.queryNvdApi('', baseQuery);
+        onProgress?.("searching", `Searching NVD for "${baseQuery}"...`);
+        let search1Data = await this.queryNvdApi('', baseQuery, onProgress);
         const search1Results: CpeProduct[] = search1Data.products || [];
         const search1Total = search1Data.totalResults || 0;
         console.log(`[Progressive Search] Initial search found ${search1Total} results`);
 
         if (search1Total <= 10) {
             console.log(`[Progressive Search] <= 10 results, returning initial results`);
+            onProgress?.("searching", `Found ${search1Total} result${search1Total !== 1 ? 's' : ''} — good match`);
             return search1Total >= 1 ? search1Results : [];
         }
 
@@ -373,19 +381,22 @@ class Cpe {
         if (version) {
             const versionQuery = `${baseQuery} ${version}`;
             console.log(`[Progressive Search] Trying with version: "${versionQuery}"`);
-            const versionData = await this.queryNvdApi('', versionQuery);
+            onProgress?.("narrowing", `Too many results (${search1Total}). Narrowing with version "${version}"...`);
+            const versionData = await this.queryNvdApi('', versionQuery, onProgress);
             const versionResults: CpeProduct[] = versionData.products || [];
             const versionTotal = versionData.totalResults || 0;
             console.log(`[Progressive Search] Version query returned ${versionTotal} results`);
 
             if (versionTotal >= 1 && versionTotal <= 10) {
                 console.log(`[Progressive Search] Good match with version!`);
+                onProgress?.("searching", `Found ${versionTotal} result${versionTotal !== 1 ? 's' : ''} with version — good match`);
                 return versionResults;
             }
-            
+
             if (versionTotal === 0) {
                 // Version too specific, return base results
                 console.log(`[Progressive Search] Version too specific, returning base results`);
+                onProgress?.("searching", `Version too specific, using broader results (${search1Total})`);
                 return search1Results;
             }
         }
@@ -395,8 +406,9 @@ class Cpe {
             console.log(`[Progressive Search] No version candidates, returning initial results`);
             return search1Results;
         }
-        
+
         console.log(`[Progressive Search] Too many results (${search1Total}), narrowing with candidates: ${parsedAsset.versionCandidates.join(', ')}`);
+        onProgress?.("narrowing", `Still too many results. Progressive narrowing with version candidates...`);
         let currentResults: CpeProduct[] = search1Results;
         let queryParts: string[] = [baseQuery];
 
@@ -404,7 +416,8 @@ class Cpe {
             queryParts.push(candidate);
             const query = queryParts.join(' ');
             console.log(`[Progressive Search] Trying query: "${query}"`);
-            const searchNData = await this.queryNvdApi('', query);
+            onProgress?.("narrowing", `Trying narrower query: "${query}"...`);
+            const searchNData = await this.queryNvdApi('', query, onProgress);
             const searchNResults: CpeProduct[] = searchNData.products || [];
             const searchNTotal = searchNData.totalResults || 0;
             console.log(`[Progressive Search] Query "${query}" returned ${searchNTotal} results`);
@@ -428,9 +441,11 @@ class Cpe {
     /**
      * High-level method: parse asset and search NVD
      */
-    public async findCpe(rawAssetName: string): Promise<{ parsed: ParsedAsset; results: CpeProduct[] }> {
+    public async findCpe(rawAssetName: string, onProgress?: ProgressCallback): Promise<{ parsed: ParsedAsset; results: CpeProduct[] }> {
+        onProgress?.("parsing", `Parsing "${rawAssetName}"...`);
         const parsed = await this.parseAsset(rawAssetName);
-        const results = await this.progressiveSearch(parsed);
+        onProgress?.("parsing", `Parsed — vendor: "${parsed.vendor || '?'}", product: "${parsed.product || '?'}", version: "${parsed.version || 'none'}"`);
+        const results = await this.progressiveSearch(parsed, onProgress);
         return { parsed, results };
     }
 

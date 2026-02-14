@@ -1,10 +1,11 @@
 'use client'
 
 import MapSidebar from '@/components/map/MapSidebar'
-import { getAssets } from '@/lib/api'
+import AssetNode from '@/components/map/AssetNode'
+import { getAssets, type Asset } from '@/lib/api'
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
-import React, { lazy, useCallback, useEffect, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo } from 'react'
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -19,60 +20,42 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 
-
-const initialNodes = [
-  { id: '1', position: { x: 250, y: 5 }, data: { label: 'Node 1' } },
-]
-
-const initialEdges: Edge[] = []
+const nodeTypes = { asset: AssetNode }
 
 const Page = () => {
-    const params = useParams()
-    const envId = params.envId as string 
-    const [selectedAsset, setSelectedAsset] = React.useState<any>(null)
+  const params = useParams()
+  const envId = params.envId as string
+  const [selectedAsset, setSelectedAsset] = React.useState<Asset | null>(null)
 
-    // useeffect to consolelog selected asset
-    useEffect(() => {
-    console.log('Selected Asset:', selectedAsset)
-    }, [selectedAsset])
-
-
-
-    // fetch assets using React Flow
-    const {data: assets, isLoading, error} = useQuery({
+  const { data: assets, isLoading, error } = useQuery({
     queryKey: ['assets', envId],
-    queryFn: async () => getAssets(envId), 
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    queryFn: async () => getAssets(envId),
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
-    })
+  })
 
-
-
-    // convert assets to React Flow Nodes and Edges
-    const assetNodes = useMemo(() => {
+  // Convert assets to custom nodes with auto-layout
+  const assetNodes = useMemo(() => {
     if (!assets) return [] as Node[]
 
+    const cols = 3
+    const xGap = 240
+    const yGap = 120
+
     return assets.map((asset, idx) => ({
-        id: asset.id,
-        position: { 
-        x: asset.x ?? 250 + (idx * 180), 
-        y: asset.y ?? 100 
-        },
-        data: { asset, label: asset.name },
+      id: asset.id,
+      type: 'asset',
+      position: {
+        x: asset.x ?? (60 + (idx % cols) * xGap),
+        y: asset.y ?? (60 + Math.floor(idx / cols) * yGap),
+      },
+      data: { asset, label: asset.name },
     })) as Node[]
-    }, [assets])
+  }, [assets])
 
-
-
-
-
-
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
-
-  // update the nodes whene the assets loads
   useEffect(() => {
     if (assetNodes.length > 0) {
       setNodes(assetNodes)
@@ -88,7 +71,9 @@ const Page = () => {
     setSelectedAsset(node.data.asset)
   }, [])
 
-
+  const onPaneClick = useCallback(() => {
+    setSelectedAsset(null)
+  }, [])
 
   if (isLoading) {
     return (
@@ -107,25 +92,38 @@ const Page = () => {
   }
 
   return (
-    <div className='h-full w-full flex '>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodeClick={onNodeClick}
-        fitView
-      >
-        <Controls />
-        <MiniMap />
-        <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
-      </ReactFlow>
-      <div className="w-1/3 p-4 border-l border-gray-200">
-        {/* Sidebar or details panel can go here */}
-
-        <MapSidebar asset={selectedAsset} onClose={() => setSelectedAsset(null)} />
+    <div className="h-full w-full flex">
+      {/* Canvas */}
+      <div className={`flex-1 transition-all duration-200 ${selectedAsset ? '' : ''}`}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
+          fitView
+          fitViewOptions={{ padding: 0.3 }}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Controls
+            className="!bg-surface !border-border !rounded-lg !shadow-md [&>button]:!bg-surface [&>button]:!border-border [&>button]:!text-text-secondary [&>button:hover]:!bg-surface-secondary"
+          />
+          <MiniMap
+            className="!bg-surface !border-border !rounded-lg"
+            nodeColor="var(--brand-color-1)"
+            maskColor="var(--background-secondary)"
+          />
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
+        </ReactFlow>
       </div>
+
+      {/* Sidebar */}
+      {selectedAsset && (
+        <MapSidebar asset={selectedAsset} onClose={() => setSelectedAsset(null)} />
+      )}
     </div>
   )
 }

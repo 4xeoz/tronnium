@@ -24,6 +24,7 @@ import type {
     ScoreBreakdown,
     CpeCandidate,
 } from '../types/cpe.types';
+import type { ProgressCallback } from './cpe';
 
 // Re-export types for consumers
 export type { ParsedAsset, CpeProduct, CpeCandidate, ScoreBreakdown, DeconstructedCpe };
@@ -725,10 +726,13 @@ function scoreCpeCandidate(parsedAsset: ParsedAsset, cpeProduct: CpeProduct): Cp
 export function rankCpeCandidates(
     parsedAsset: ParsedAsset,
     cpeProducts: CpeProduct[],
-    topN: number = 5
+    topN: number = 5,
+    onProgress?: ProgressCallback
 ): CpeCandidate[] {
     const candidates: CpeCandidate[] = [];
-    
+
+    onProgress?.("scoring", `Scoring ${cpeProducts.length} candidates...`);
+
     // Score each CPE candidate
     for (const cpeProduct of cpeProducts) {
         const candidate = scoreCpeCandidate(parsedAsset, cpeProduct);
@@ -736,7 +740,11 @@ export function rankCpeCandidates(
             candidates.push(candidate);
         }
     }
-    
+
+    onProgress?.("ranking", `Ranking ${candidates.length} scored candidates...`);
+
     // Phase 5: Rank and return top N
-    return rankCandidates(candidates, topN);
+    const ranked = rankCandidates(candidates, topN);
+    onProgress?.("ranking", `Top ${ranked.length} candidates selected (best score: ${ranked[0]?.score ?? 0}%)`);
+    return ranked;
 }

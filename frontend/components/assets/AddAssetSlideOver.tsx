@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { FiX, FiSearch, FiCheck, FiAlertCircle, FiLoader } from "react-icons/fi";
+import { motion, AnimatePresence } from "motion/react";
 import {
   findCpe,
   validateCpe,
@@ -10,6 +11,26 @@ import {
   type CpeCandidate,
   type CreateAssetInput,
 } from "@/lib/api";
+
+// Pipeline phases for the step indicator
+const PIPELINE_PHASES = ["Parse", "Search NVD", "Score", "Rank"] as const;
+
+function stepToPhaseIndex(step: string): number {
+  switch (step) {
+    case "parsing":
+      return 0;
+    case "searching":
+    case "waiting":
+    case "narrowing":
+      return 1;
+    case "scoring":
+      return 2;
+    case "ranking":
+      return 3;
+    default:
+      return 0;
+  }
+}
 
 interface AddAssetSlideOverProps {
   isOpen: boolean;
@@ -52,6 +73,14 @@ export default function AddAssetSlideOver({
     message: string;
   } | null>(null);
 
+  // Progress feed
+  const [progressMessages, setProgressMessages] = useState<
+    { step: string; message: string }[]
+  >([]);
+  const [pipelineComplete, setPipelineComplete] = useState(false);
+  // const [showPipelineLog, setShowPipelineLog] = useState(true);
+  const showPipelineLog = true; // Always show log for now since it also shows validation results
+
   const resetForm = () => {
     setSearchMode("name");
     setStep("input");
@@ -66,6 +95,9 @@ export default function AddAssetSlideOver({
     setSelectedCpes([]);
     setError(null);
     setValidationResult(null);
+    setProgressMessages([]);
+    setPipelineComplete(false);
+    // setShowPipelineLog(true);
   };
 
   const handleClose = () => {
@@ -97,6 +129,7 @@ export default function AddAssetSlideOver({
 
   // Add ref to track EventSource
   const eventSourceRef = useRef<EventSource | null>(null);
+  const progressEndRef = useRef<HTMLDivElement | null>(null);
 
   // Cleanup EventSource when component unmounts or closes
   useEffect(() => {
@@ -107,6 +140,11 @@ export default function AddAssetSlideOver({
       }
     };
   }, []);
+
+  // Auto-scroll progress feed
+  useEffect(() => {
+    progressEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [progressMessages]);
 
   // Also cleanup when slide-over closes
   useEffect(() => {
@@ -126,27 +164,35 @@ export default function AddAssetSlideOver({
 
     setError(null);
     setIsSearching(true);
+    setProgressMessages([]);
+    setPipelineComplete(false);
+    // setShowPipelineLog(false);
 
     eventSourceRef.current = listenForCpeFindProgress(
       assetName.trim(),
       10,
       (update) => {
-        console.log("Progress update:", update);
-        // Optionally display progress in UI
+        setProgressMessages((prev) => [...prev, update]);
       },
       (result) => {
+        setIsSearching(false);
+        setPipelineComplete(true);
         if (result.success && result.candidates.length > 0) {
           setCandidates(result.candidates);
           setStep("select");
         } else {
           setError("No CPE candidates found. Try a different search term.");
+          // Clear on failure — nothing useful to show
+          setProgressMessages([]);
+          setPipelineComplete(false);
         }
-        setIsSearching(false);
         eventSourceRef.current = null;
       },
       (err) => {
         setError(err);
         setIsSearching(false);
+        setProgressMessages([]);
+        setPipelineComplete(false);
         eventSourceRef.current = null;
       }
     );
@@ -319,9 +365,10 @@ export default function AddAssetSlideOver({
                           type="text"
                           value={assetName}
                           onChange={(e) => setAssetName(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleSearchByName()}
+                          onKeyDown={(e) => e.key === "Enter" && !isSearching && handleSearchByName()}
                           placeholder="e.g., OpenSSL 1.1.1, Apache HTTP Server 2.4"
-                          className="w-full px-4 py-3 pr-12 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent"
+                          disabled={isSearching}
+                          className="w-full px-4 py-3 pr-12 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent disabled:opacity-60"
                         />
                         <button
                           onClick={handleSearchByName}
@@ -340,73 +387,169 @@ export default function AddAssetSlideOver({
                       </p>
                     </div>
 
-                    {/* Description (optional) */}
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        Description (Optional)
-                      </label>
-                      <textarea
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Additional details about this asset..."
-                        rows={3}
-                        className="w-full px-4 py-3 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent resize-none"
-                      />
-                    </div>
-
-                    {/* Additional Fields */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-text-primary mb-2">Type</label>
-                        <select
-                          value={type}
-                          onChange={(e) => setType(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-1"
+                    {/* Progress Feed — shown while searching */}
+                    <AnimatePresence>
+                      {isSearching && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.3, ease: "easeOut" }}
+                          className="overflow-hidden"
                         >
-                          <option value="unknown">Unknown</option>
-                          <option value="server">Server</option>
-                          <option value="database">Database</option>
-                          <option value="network">Network</option>
-                          <option value="firewall">Firewall</option>
-                          <option value="iot">IoT Device</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-text-primary mb-2">Status</label>
-                        <select
-                          value={status}
-                          onChange={(e) => setStatus(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-1"
-                        >
-                          <option value="active">Active</option>
-                          <option value="inactive">Inactive</option>
-                          <option value="maintenance">Maintenance</option>
-                        </select>
-                      </div>
-                    </div>
+                          <div className="rounded-lg border border-border bg-surface-secondary p-4 space-y-4">
+                            {/* Pipeline stepper */}
+                            <div className="flex items-center gap-1">
+                              {PIPELINE_PHASES.map((phase, i) => {
+                                const currentPhase = progressMessages.length > 0
+                                  ? stepToPhaseIndex(progressMessages[progressMessages.length - 1].step)
+                                  : -1;
+                                const isDone = i < currentPhase;
+                                const isActive = i === currentPhase;
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-text-primary mb-2">Location</label>
-                        <input
-                          type="text"
-                          value={location}
-                          onChange={(e) => setLocation(e.target.value)}
-                          placeholder="e.g., Data Center 1"
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-text-primary mb-2">IP Address</label>
-                        <input
-                          type="text"
-                          value={ipAddress}
-                          onChange={(e) => setIpAddress(e.target.value)}
-                          placeholder="e.g., 192.168.1.1"
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1"
-                        />
-                      </div>
-                    </div>
+                                return (
+                                  <div key={phase} className="flex items-center flex-1 last:flex-initial">
+                                    <div className="flex flex-col items-center gap-1">
+                                      <motion.div
+                                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium border-2 transition-colors ${
+                                          isDone
+                                            ? "bg-brand-1 border-brand-1 text-brand-2"
+                                            : isActive
+                                            ? "border-brand-1 text-brand-1 bg-brand-1/10"
+                                            : "border-border text-text-muted bg-surface"
+                                        }`}
+                                        animate={isActive ? { scale: [1, 1.15, 1] } : {}}
+                                        transition={isActive ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" } : {}}
+                                      >
+                                        {isDone ? (
+                                          <FiCheck className="w-3.5 h-3.5" />
+                                        ) : (
+                                          <span>{i + 1}</span>
+                                        )}
+                                      </motion.div>
+                                      <span className={`text-[10px] font-medium whitespace-nowrap ${
+                                        isDone || isActive ? "text-text-primary" : "text-text-muted"
+                                      }`}>
+                                        {phase}
+                                      </span>
+                                    </div>
+                                    {i < PIPELINE_PHASES.length - 1 && (
+                                      <div className="flex-1 h-0.5 mx-1 mb-4 rounded-full overflow-hidden bg-border">
+                                        <motion.div
+                                          className="h-full bg-brand-1"
+                                          initial={{ width: "0%" }}
+                                          animate={{ width: isDone ? "100%" : isActive ? "50%" : "0%" }}
+                                          transition={{ duration: 0.4, ease: "easeOut" }}
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Message log */}
+                            <div className="space-y-1 max-h-36 overflow-y-auto">
+                              <AnimatePresence initial={false}>
+                                {progressMessages.map((msg, i) => (
+                                  <motion.div
+                                    key={i}
+                                    initial={{ opacity: 0, x: -12 }}
+                                    animate={{
+                                      opacity: i === progressMessages.length - 1 ? 1 : 0.5,
+                                      x: 0,
+                                    }}
+                                    transition={{ duration: 0.25, ease: "easeOut" }}
+                                    className="text-xs flex items-start gap-2 text-text-secondary"
+                                  >
+                                    {i === progressMessages.length - 1 ? (
+                                      <FiLoader className="w-3 h-3 mt-0.5 shrink-0 animate-spin text-brand-1" />
+                                    ) : (
+                                      <FiCheck className="w-3 h-3 mt-0.5 shrink-0 text-text-muted" />
+                                    )}
+                                    <span>{msg.message}</span>
+                                  </motion.div>
+                                ))}
+                              </AnimatePresence>
+                              <div ref={progressEndRef} />
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Rest of fields hidden during search to reduce noise */}
+                    {!isSearching && (
+                      <>
+                        {/* Description (optional) */}
+                        <div>
+                          <label className="block text-sm font-medium text-text-primary mb-2">
+                            Description (Optional)
+                          </label>
+                          <textarea
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            placeholder="Additional details about this asset..."
+                            rows={3}
+                            className="w-full px-4 py-3 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent resize-none"
+                          />
+                        </div>
+
+                        {/* Additional Fields */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">Type</label>
+                            <select
+                              value={type}
+                              onChange={(e) => setType(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-1"
+                            >
+                              <option value="unknown">Unknown</option>
+                              <option value="server">Server</option>
+                              <option value="database">Database</option>
+                              <option value="network">Network</option>
+                              <option value="firewall">Firewall</option>
+                              <option value="iot">IoT Device</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">Status</label>
+                            <select
+                              value={status}
+                              onChange={(e) => setStatus(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-1"
+                            >
+                              <option value="active">Active</option>
+                              <option value="inactive">Inactive</option>
+                              <option value="maintenance">Maintenance</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">Location</label>
+                            <input
+                              type="text"
+                              value={location}
+                              onChange={(e) => setLocation(e.target.value)}
+                              placeholder="e.g., Data Center 1"
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">IP Address</label>
+                            <input
+                              type="text"
+                              value={ipAddress}
+                              onChange={(e) => setIpAddress(e.target.value)}
+                              placeholder="e.g., 192.168.1.1"
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </>
                 ) : (
                   <>
@@ -430,12 +573,12 @@ export default function AddAssetSlideOver({
                         <button
                           onClick={handleValidateCpe}
                           disabled={!cpeInput.trim() || isValidating}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-text-muted hover:text-text-primary disabled:opacity-50"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-brand-2 rounded-md text-text-muted hover:text-white disabled:opacity-50"
                         >
                           {isValidating ? (
                             <FiLoader className="w-5 h-5 animate-spin" />
                           ) : (
-                            <FiCheck className="w-5 h-5" />
+                            <FiSearch className="w-5 h-5" />
                           )}
                         </button>
                       </div>
@@ -487,7 +630,72 @@ export default function AddAssetSlideOver({
             {/* Step 2: Select CPEs */}
             {step === "select" && (
               <div className="space-y-4">
-                <div className="text-sm text-text-secondary mb-4">
+                {/* Completed pipeline indicator */}
+                {pipelineComplete && progressMessages.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    className="rounded-lg border border-border bg-surface-secondary p-3"
+                  >
+                    {/* Compact stepper — all done */}
+                    <div className="flex items-center gap-1">
+                      {PIPELINE_PHASES.map((phase, i) => (
+                        <div key={phase} className="flex items-center flex-1 last:flex-initial">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <motion.div
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium border-2 bg-brand-1 border-brand-1 text-brand-2"
+                              initial={{ scale: 0.8 }}
+                              animate={{ scale: 1 }}
+                              transition={{ delay: i * 0.08, duration: 0.2 }}
+                            >
+                              <FiCheck className="w-3 h-3" />
+                            </motion.div>
+                            <span className="text-[9px] font-medium text-text-primary whitespace-nowrap">
+                              {phase}
+                            </span>
+                          </div>
+                          {i < PIPELINE_PHASES.length - 1 && (
+                            <div className="flex-1 h-0.5 mx-1 mb-3.5 rounded-full bg-brand-1" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Expandable log */}
+                    <button
+                      // onClick={() => setShowPipelineLog((v) => !v)}
+                      className="mt-2 w-full text-[10px] text-text-muted hover:text-text-secondary transition-colors text-center"
+                    >
+                      {showPipelineLog ? "Hide details" : `Show pipeline details (${progressMessages.length} steps)`}
+                    </button>
+                    <AnimatePresence>
+                      {showPipelineLog && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-2 pt-2 border-t border-border space-y-1 h-full">
+                            {progressMessages.map((msg, i) => (
+                              <div
+                                key={i}
+                                className="text-xs flex items-start gap-2 text-text-muted"
+                              >
+                                <FiCheck className="w-3 h-3 mt-0.5 shrink-0" />
+                                <span>{msg.message}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
+
+                <div className="text-sm text-text-secondary">
                   Found {candidates.length} CPE candidates for &quot;{assetName}&quot;.
                   Select the ones that match your asset:
                 </div>
@@ -590,6 +798,9 @@ export default function AddAssetSlideOver({
                       setStep("input");
                       setCandidates([]);
                       setSelectedCpes([]);
+                      setProgressMessages([]);
+                      setPipelineComplete(false);
+                      // setShowPipelineLog(false);
                     }}
                     className="flex-1 px-4 py-3 rounded-lg border border-border text-text-secondary hover:bg-surface-secondary transition-colors"
                   >
