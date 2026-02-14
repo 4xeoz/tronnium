@@ -78,7 +78,8 @@ export default function AddAssetSlideOver({
     { step: string; message: string }[]
   >([]);
   const [pipelineComplete, setPipelineComplete] = useState(false);
-  const [showPipelineLog, setShowPipelineLog] = useState(false);
+  // const [showPipelineLog, setShowPipelineLog] = useState(true);
+  const showPipelineLog = true; // Always show log for now since it also shows validation results
 
   const resetForm = () => {
     setSearchMode("name");
@@ -96,7 +97,7 @@ export default function AddAssetSlideOver({
     setValidationResult(null);
     setProgressMessages([]);
     setPipelineComplete(false);
-    setShowPipelineLog(false);
+    // setShowPipelineLog(true);
   };
 
   const handleClose = () => {
@@ -165,7 +166,7 @@ export default function AddAssetSlideOver({
     setIsSearching(true);
     setProgressMessages([]);
     setPipelineComplete(false);
-    setShowPipelineLog(false);
+    // setShowPipelineLog(false);
 
     eventSourceRef.current = listenForCpeFindProgress(
       assetName.trim(),
@@ -572,12 +573,12 @@ export default function AddAssetSlideOver({
                         <button
                           onClick={handleValidateCpe}
                           disabled={!cpeInput.trim() || isValidating}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-text-muted hover:text-text-primary disabled:opacity-50"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-brand-2 rounded-md text-text-muted hover:text-white disabled:opacity-50"
                         >
                           {isValidating ? (
                             <FiLoader className="w-5 h-5 animate-spin" />
                           ) : (
-                            <FiCheck className="w-5 h-5" />
+                            <FiSearch className="w-5 h-5" />
                           )}
                         </button>
                       </div>
@@ -663,7 +664,7 @@ export default function AddAssetSlideOver({
 
                     {/* Expandable log */}
                     <button
-                      onClick={() => setShowPipelineLog((v) => !v)}
+                      // onClick={() => setShowPipelineLog((v) => !v)}
                       className="mt-2 w-full text-[10px] text-text-muted hover:text-text-secondary transition-colors text-center"
                     >
                       {showPipelineLog ? "Hide details" : `Show pipeline details (${progressMessages.length} steps)`}
@@ -677,7 +678,7 @@ export default function AddAssetSlideOver({
                           transition={{ duration: 0.2 }}
                           className="overflow-hidden"
                         >
-                          <div className="mt-2 pt-2 border-t border-border space-y-1 max-h-32 overflow-y-auto">
+                          <div className="mt-2 pt-2 border-t border-border space-y-1 h-full">
                             {progressMessages.map((msg, i) => (
                               <div
                                 key={i}
@@ -799,7 +800,7 @@ export default function AddAssetSlideOver({
                       setSelectedCpes([]);
                       setProgressMessages([]);
                       setPipelineComplete(false);
-                      setShowPipelineLog(false);
+                      // setShowPipelineLog(false);
                     }}
                     className="flex-1 px-4 py-3 rounded-lg border border-border text-text-secondary hover:bg-surface-secondary transition-colors"
                   >
