@@ -52,6 +52,11 @@ export default function AddAssetSlideOver({
     message: string;
   } | null>(null);
 
+  // Progress feed
+  const [progressMessages, setProgressMessages] = useState<
+    { step: string; message: string }[]
+  >([]);
+
   const resetForm = () => {
     setSearchMode("name");
     setStep("input");
@@ -66,6 +71,7 @@ export default function AddAssetSlideOver({
     setSelectedCpes([]);
     setError(null);
     setValidationResult(null);
+    setProgressMessages([]);
   };
 
   const handleClose = () => {
@@ -126,13 +132,13 @@ export default function AddAssetSlideOver({
 
     setError(null);
     setIsSearching(true);
+    setProgressMessages([]);
 
     eventSourceRef.current = listenForCpeFindProgress(
       assetName.trim(),
       10,
       (update) => {
-        console.log("Progress update:", update);
-        // Optionally display progress in UI
+        setProgressMessages((prev) => [...prev, update]);
       },
       (result) => {
         if (result.success && result.candidates.length > 0) {
@@ -142,11 +148,13 @@ export default function AddAssetSlideOver({
           setError("No CPE candidates found. Try a different search term.");
         }
         setIsSearching(false);
+        setProgressMessages([]);
         eventSourceRef.current = null;
       },
       (err) => {
         setError(err);
         setIsSearching(false);
+        setProgressMessages([]);
         eventSourceRef.current = null;
       }
     );
@@ -319,9 +327,10 @@ export default function AddAssetSlideOver({
                           type="text"
                           value={assetName}
                           onChange={(e) => setAssetName(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleSearchByName()}
+                          onKeyDown={(e) => e.key === "Enter" && !isSearching && handleSearchByName()}
                           placeholder="e.g., OpenSSL 1.1.1, Apache HTTP Server 2.4"
-                          className="w-full px-4 py-3 pr-12 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent"
+                          disabled={isSearching}
+                          className="w-full px-4 py-3 pr-12 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent disabled:opacity-60"
                         />
                         <button
                           onClick={handleSearchByName}
@@ -340,73 +349,105 @@ export default function AddAssetSlideOver({
                       </p>
                     </div>
 
-                    {/* Description (optional) */}
-                    <div>
-                      <label className="block text-sm font-medium text-text-primary mb-2">
-                        Description (Optional)
-                      </label>
-                      <textarea
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Additional details about this asset..."
-                        rows={3}
-                        className="w-full px-4 py-3 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent resize-none"
-                      />
-                    </div>
+                    {/* Progress Feed — shown while searching */}
+                    {isSearching && progressMessages.length > 0 && (
+                      <div className="rounded-lg border border-border bg-surface-secondary p-4 space-y-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <FiLoader className="w-4 h-4 animate-spin text-brand-1" />
+                          <span className="text-sm font-medium text-text-primary">
+                            Searching...
+                          </span>
+                        </div>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {progressMessages.map((msg, i) => (
+                            <div
+                              key={i}
+                              className={`text-xs flex items-start gap-2 ${
+                                i === progressMessages.length - 1
+                                  ? "text-text-primary"
+                                  : "text-text-muted"
+                              }`}
+                            >
+                              <span className="shrink-0 mt-0.5 w-1.5 h-1.5 rounded-full bg-current" />
+                              <span>{msg.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                    {/* Additional Fields */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-text-primary mb-2">Type</label>
-                        <select
-                          value={type}
-                          onChange={(e) => setType(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-1"
-                        >
-                          <option value="unknown">Unknown</option>
-                          <option value="server">Server</option>
-                          <option value="database">Database</option>
-                          <option value="network">Network</option>
-                          <option value="firewall">Firewall</option>
-                          <option value="iot">IoT Device</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-text-primary mb-2">Status</label>
-                        <select
-                          value={status}
-                          onChange={(e) => setStatus(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-1"
-                        >
-                          <option value="active">Active</option>
-                          <option value="inactive">Inactive</option>
-                          <option value="maintenance">Maintenance</option>
-                        </select>
-                      </div>
-                    </div>
+                    {/* Rest of fields hidden during search to reduce noise */}
+                    {!isSearching && (
+                      <>
+                        {/* Description (optional) */}
+                        <div>
+                          <label className="block text-sm font-medium text-text-primary mb-2">
+                            Description (Optional)
+                          </label>
+                          <textarea
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            placeholder="Additional details about this asset..."
+                            rows={3}
+                            className="w-full px-4 py-3 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1 focus:border-transparent resize-none"
+                          />
+                        </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-text-primary mb-2">Location</label>
-                        <input
-                          type="text"
-                          value={location}
-                          onChange={(e) => setLocation(e.target.value)}
-                          placeholder="e.g., Data Center 1"
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-text-primary mb-2">IP Address</label>
-                        <input
-                          type="text"
-                          value={ipAddress}
-                          onChange={(e) => setIpAddress(e.target.value)}
-                          placeholder="e.g., 192.168.1.1"
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1"
-                        />
-                      </div>
-                    </div>
+                        {/* Additional Fields */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">Type</label>
+                            <select
+                              value={type}
+                              onChange={(e) => setType(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-1"
+                            >
+                              <option value="unknown">Unknown</option>
+                              <option value="server">Server</option>
+                              <option value="database">Database</option>
+                              <option value="network">Network</option>
+                              <option value="firewall">Firewall</option>
+                              <option value="iot">IoT Device</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">Status</label>
+                            <select
+                              value={status}
+                              onChange={(e) => setStatus(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-1"
+                            >
+                              <option value="active">Active</option>
+                              <option value="inactive">Inactive</option>
+                              <option value="maintenance">Maintenance</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">Location</label>
+                            <input
+                              type="text"
+                              value={location}
+                              onChange={(e) => setLocation(e.target.value)}
+                              placeholder="e.g., Data Center 1"
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-text-primary mb-2">IP Address</label>
+                            <input
+                              type="text"
+                              value={ipAddress}
+                              onChange={(e) => setIpAddress(e.target.value)}
+                              placeholder="e.g., 192.168.1.1"
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </>
                 ) : (
                   <>

@@ -88,16 +88,18 @@ export async function cpeFindHandler(req: Request, res: Response) {
             res.write(`data: ${JSON.stringify({ type, step, message, data })}\n\n`);
         };
 
+        // Progress callback that forwards to SSE
+        const onProgress = (step: string, message: string) => {
+            sendProgress(step, message, "progress");
+        };
+
         // Phase 1 & 2: Parse asset and search NVD
         console.log(`[CPE Find] Processing: "${trimmedAssetName}"`);
-        sendProgress("parsing", "Parsing asset name and searching NVD for candidates...", "progress");
-        
-        const { parsed, results } = await cpe.findCpe(trimmedAssetName);
+        const { parsed, results } = await cpe.findCpe(trimmedAssetName, onProgress);
 
         // Phase 3, 4, 5: Rank the CPE candidates
         sendProgress("ranking", `Found ${results.length} candidates. Ranking and scoring...`, "progress");
-        
-        const rankedCandidates: CpeCandidate[] = rankCpeCandidates(parsed, results, resultLimit);
+        const rankedCandidates: CpeCandidate[] = rankCpeCandidates(parsed, results, resultLimit, onProgress);
 
         console.log(`[CPE Find] Found ${results.length} CPEs, returning top ${rankedCandidates.length} ranked candidates`);
 
