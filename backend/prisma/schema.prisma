@@ -76,6 +76,7 @@ model Environment {
   assets          Asset[]
 
   @@index([ownerId])
+  relationships Relationship[]
 }
 
 
@@ -126,4 +127,81 @@ model Asset {
   @@index([domain])
   @@index([type])
   @@index([status])
+
+
+  
+  relationshipsFrom Relationship[] @relation("FromAsset")
+  relationshipsTo   Relationship[] @relation("ToAsset")
+  
+
 }
+
+model Relationship {
+  id            String      @id @default(uuid()) @db.Uuid
+
+  environmentId String      @db.Uuid
+  environment   Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  fromAssetId   String      @db.Uuid
+  fromAsset     Asset       @relation("FromAsset", fields: [fromAssetId], references: [id], onDelete: Cascade)
+
+  toAssetId     String      @db.Uuid
+  toAsset       Asset       @relation("ToAsset", fields: [toAssetId], references: [id], onDelete: Cascade)
+
+  type          RelationType   
+
+  criticality   RelationshipCriticality @default(MEDIUM)
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([environmentId])
+  @@index([fromAssetId])
+  @@index([toAssetId])
+  @@index([fromAssetId, environmentId])
+  @@index([toAssetId, environmentId])
+
+  @@unique([fromAssetId, toAssetId, type])
+
+
+}
+
+
+enum RelationType {
+  DEPENDS_ON
+  CONTROLS
+  PROVIDES_SERVICE
+  SHARES_DATA_WITH
+  
+}
+
+
+enum AssetType {
+  SERVER
+  DATABASE
+  NETWORK
+  FIREWALL
+  IOT
+  ROUTER
+  SWITCH
+  STORAGE
+  LOAD_BALANCER
+  UNKNOWN
+}
+
+enum AssetStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+  DECOMMISSIONED
+  UNKNOWN
+}
+
+enum RelationshipCriticality {
+  LOW      // Failures won't impact service
+  MEDIUM   // Degraded performance if fails
+  HIGH     // Service outage if fails
+  CRITICAL // System-wide outage if fails
+}
+
+

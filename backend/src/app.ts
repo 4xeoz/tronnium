@@ -18,8 +18,8 @@ export function createApp() {
   app.use(express.json());
   app.use(cookieParser());
 
-  configurePassport();
   app.use(passport.initialize());
+  configurePassport();
 
   app.use("/", apiRouter);
 

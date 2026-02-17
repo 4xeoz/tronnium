@@ -273,6 +273,7 @@ export async function getAssetsHandler(req: Request, res: Response) {
         const { environmentId } = req.params;
         const user = req.user as PublicUser;
 
+
         // Verify environment belongs to user
         const environment = await prisma.environment.findFirst({
             where: {

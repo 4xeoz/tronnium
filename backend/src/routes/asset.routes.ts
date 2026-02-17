@@ -5,10 +5,8 @@ import { jwtAuthGuard } from "../auth/passport";
 
 export const assetRouter = Router();
 
-// Health check
-assetRouter.get("/test", logRequest(), (req, res) => {
-    res.json({ message: "Asset route is working!" });
-});
+
+// assetRouter.use(jwtAuthGuard()); 
 
 // ============================================================================
 // CPE ROUTES
@@ -26,21 +24,23 @@ assetRouter.get("/test", logRequest(), (req, res) => {
 
 // Find and rank CPE candidates from human-readable asset name
 // Runs full pipeline: Parse → Search NVD → Rank & Score
-assetRouter.get("/cpe/find", logRequest(), cpeFindHandler);
+assetRouter.get("/cpe/find" , cpeFindHandler);
+
+assetRouter.use(jwtAuthGuard())
 
 // Validate a CPE string against NVD database
 // Checks both format validity and existence in NVD
-assetRouter.post("/cpe/validate", logRequest(), cpeValidateHandler);
+assetRouter.post("/cpe/validate",  cpeValidateHandler);
 
 // ============================================================================
 // ASSET CRUD ROUTES (Requires Authentication)
 // ============================================================================
 
 // GET /assets/:environmentId - Get all assets for an environment
-assetRouter.get("/:environmentId", jwtAuthGuard(), logRequest(), getAssetsHandler);
+assetRouter.get("/:environmentId",  getAssetsHandler);
 
 // POST /assets/:environmentId - Create a new asset in an environment
-assetRouter.post("/:environmentId", jwtAuthGuard(), logRequest(), createAssetHandler);
+assetRouter.post("/:environmentId", createAssetHandler);
 
 // POST /assets/:environmentId/:assetId/delete - Delete an asset from an environment
-assetRouter.post("/:environmentId/:assetId/delete", jwtAuthGuard(), logRequest(), deleteAssetHandler);
+assetRouter.post("/:environmentId/:assetId/delete", deleteAssetHandler);

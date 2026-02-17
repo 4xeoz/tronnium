@@ -38,13 +38,15 @@ export async function createEnvironmentHandler(req: Request, res: Response) {
  * GET /environments
  */
 export async function getEnvironmentsHandler(req: Request, res: Response) {
-  const user = req.user as PublicUser;
+  
+
+  try {
+    const user = req.user as PublicUser;
 
   if (!user) {
     return res.status(401).json({ message: "Not authenticated." });
   }
-
-  try {
+  
     const environments = await environmentService.findAllByOwnerWithAssetCount(user.id);
     return res.json(environments);
   } catch (error) {
