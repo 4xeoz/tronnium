@@ -157,6 +157,11 @@ export default function AddAssetSlideOver({
   const handleSearchByName = () => {
     if (!assetName.trim()) return;
 
+    if (assetName.length < 4) {
+      setError("Please enter at least 4 characters to search");
+      return;
+    }
+
     // Close any existing connection
     if (eventSourceRef.current) {
       eventSourceRef.current.close();

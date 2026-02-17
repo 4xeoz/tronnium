@@ -27,6 +27,19 @@ export type Asset = {
   updatedAt: string;
 };
 
+export type Relationship = {
+  id: string;
+  environmentId: string;
+  fromAssetId: string;
+  toAssetId: string;
+  type: "DEPENDS_ON" | "CONTROLS" | "PROVIDES_SERVICE" | "SHARES_DATA_WITH";
+  criticality: "low" | "medium" | "high";
+  createdAt: string;
+  updatedAt: string;
+  fromAsset?: Asset; // Optional, can be included when fetching relationships with asset details
+  toAsset?: Asset;   // Optional, can be included when fetching relationships with asset details
+};
+
 export type CpeCandidate = {
   cpeName: string;
   cpeNameId: string;
@@ -205,5 +218,68 @@ export async function deleteAsset(
   );
 
 }
+
+
+export async function getAllRelationships(environmentId: string): Promise<Relationship[]> {
+  const response = await apiFetch<{ success: boolean; data: Relationship[], message: string }>(
+    `/relationships/${environmentId}`,
+    {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    }
+  );
+  return response.data;
+}
+
+export async function createRelationship(
+  environmentId: string,
+  fromAssetId: string,
+  toAssetId: string,
+  type: "DEPENDS_ON" | "CONTROLS" | "PROVIDES_SERVICE" | "SHARES_DATA_WITH",
+  criticality: "low" | "medium" | "high"
+): Promise<Relationship> {
+  const response = await apiFetch<{ success: boolean; data: Relationship, message: string }>(
+    `/relationships/${environmentId}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromAssetId, toAssetId, type, criticality }),
+    }
+  );
+  return response.data;
+}
+
+
+export async function updateRelationship(
+  environmentId: string,
+  relationshipId: string,
+  type: "DEPENDS_ON" | "CONTROLS" | "PROVIDES_SERVICE" | "SHARES_DATA_WITH",
+  criticality: "low" | "medium" | "high"
+): Promise<Relationship> {
+  const response = await apiFetch<{ success: boolean; data: Relationship, message: string }>(
+    `/relationships/${environmentId}/${relationshipId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, criticality }),
+    }
+  );
+  return response.data;
+}
+
+export async function deleteRelationship(
+  environmentId: string,
+  relationshipId: string
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(
+    `/relationships/${environmentId}/${relationshipId}`,
+    {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    }
+  );
+} 
+
+
     
 
