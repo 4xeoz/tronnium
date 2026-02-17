@@ -1,20 +1,42 @@
-// GET	/relationships/:environmentId	Get all relationships in environment
-// POST	/relationships/:environmentId	Create a relationship
-// PATCH	/relationships/:environmentId/:relationshipId	Update criticality/type
-// DELETE	/relationships/:environmentId/:relationshipId	Delete a relationship
-
 import { Router } from "express";
-import { createRelationshipHandler, deleteRelationshipHandler, getRelationshipsHandler, updateRelationshipHandler } from "../controllers/relationships.controller";
-import { logRequest } from "../middleware/logger";
 import { jwtAuthGuard } from "../auth/passport";
+import { logRequest } from "../middleware/logger";
+import {
+  getRelationshipsHandler,
+  createRelationshipHandler,
+  updateRelationshipHandler,
+  deleteRelationshipHandler,
+} from "../controllers/relationship.controller";
 
 export const relationshipRouter = Router();
 
-relationshipRouter.use(jwtAuthGuard());
+/**
+ * Relationship endpoints
+ */
+relationshipRouter.get(
+  "/:environmentId",
+  jwtAuthGuard(),
+  logRequest(),
+  getRelationshipsHandler
+);
 
-// Get all relationships for an environment 
-relationshipRouter.get("/:environmentId",  getRelationshipsHandler);
-relationshipRouter.post("/:environmentId", createRelationshipHandler);
-relationshipRouter.patch("/:environmentId/:relationshipId", updateRelationshipHandler);
-relationshipRouter.delete("/:environmentId/:relationshipId", deleteRelationshipHandler);
+relationshipRouter.post(
+  "/:environmentId",
+  jwtAuthGuard(),
+  logRequest(),
+  createRelationshipHandler
+);
 
+relationshipRouter.patch(
+  "/:environmentId/:relationshipId",
+  jwtAuthGuard(),
+  logRequest(),
+  updateRelationshipHandler
+);
+
+relationshipRouter.delete(
+  "/:environmentId/:relationshipId",
+  jwtAuthGuard(),
+  logRequest(),
+  deleteRelationshipHandler
+);

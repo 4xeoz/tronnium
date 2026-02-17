@@ -27,17 +27,20 @@ export type Asset = {
   updatedAt: string;
 };
 
+export type RelationType = "DEPENDS_ON" | "CONTROLS" | "PROVIDES_SERVICE" | "SHARES_DATA_WITH";
+export type CriticalityLevel = "low" | "medium" | "high";
+
 export type Relationship = {
   id: string;
   environmentId: string;
   fromAssetId: string;
   toAssetId: string;
-  type: "DEPENDS_ON" | "CONTROLS" | "PROVIDES_SERVICE" | "SHARES_DATA_WITH";
-  criticality: "low" | "medium" | "high";
+  type: RelationType;
+  criticality: CriticalityLevel;
   createdAt: string;
   updatedAt: string;
-  fromAsset?: Asset; // Optional, can be included when fetching relationships with asset details
-  toAsset?: Asset;   // Optional, can be included when fetching relationships with asset details
+  fromAsset?: { id: string; name: string; type: string };
+  toAsset?: { id: string; name: string; type: string };
 };
 
 export type CpeCandidate = {
@@ -235,10 +238,10 @@ export async function createRelationship(
   environmentId: string,
   fromAssetId: string,
   toAssetId: string,
-  type: "DEPENDS_ON" | "CONTROLS" | "PROVIDES_SERVICE" | "SHARES_DATA_WITH",
-  criticality: "low" | "medium" | "high"
+  type: RelationType,
+  criticality: CriticalityLevel
 ): Promise<Relationship> {
-  const response = await apiFetch<{ success: boolean; data: Relationship, message: string }>(
+  const response = await apiFetch<{ success: boolean; data: Relationship; message: string }>(
     `/relationships/${environmentId}`,
     {
       method: "POST",
@@ -253,15 +256,15 @@ export async function createRelationship(
 export async function updateRelationship(
   environmentId: string,
   relationshipId: string,
-  type: "DEPENDS_ON" | "CONTROLS" | "PROVIDES_SERVICE" | "SHARES_DATA_WITH",
-  criticality: "low" | "medium" | "high"
+  type?: RelationType,
+  criticality?: CriticalityLevel
 ): Promise<Relationship> {
-  const response = await apiFetch<{ success: boolean; data: Relationship, message: string }>(
+  const response = await apiFetch<{ success: boolean; data: Relationship; message: string }>(
     `/relationships/${environmentId}/${relationshipId}`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, criticality }),
+      body: JSON.stringify({ ...(type && { type }), ...(criticality && { criticality }) }),
     }
   );
   return response.data;
