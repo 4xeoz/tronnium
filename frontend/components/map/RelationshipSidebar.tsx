@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { X, Trash2, Save } from "lucide-react"
+import { X, Trash2, Save, AlertCircle } from "lucide-react"
 import type { Edge } from "reactflow"
 import type { Asset } from "@/lib/api"
 
@@ -11,24 +11,27 @@ interface RelationshipSidebarProps {
   onClose: () => void
   onUpdate: (type: string, criticality: string) => void
   onDelete: () => void
+  isLoading?: boolean
+  error?: string | null
 }
 
 const RELATIONSHIP_TYPES = [
   { value: "DEPENDS_ON", label: "Depends On" },
-  { value: "CONNECTED_TO", label: "Connected To" },
-  { value: "HOSTED_ON", label: "Hosted On" },
+  { value: "CONTROLS", label: "Controls" },
+  { value: "PROVIDES_SERVICE", label: "Provides Service" },
+  { value: "SHARES_DATA_WITH", label: "Shares Data With" },
 ]
 
 const CRITICALITY_LEVELS = [
-  { value: "LOW", label: "Low", color: "text-green-600" },
-  { value: "MEDIUM", label: "Medium", color: "text-yellow-600" },
-  { value: "HIGH", label: "High", color: "text-red-600" },
+  { value: "low", label: "Low", color: "text-green-600" },
+  { value: "medium", label: "Medium", color: "text-yellow-600" },
+  { value: "high", label: "High", color: "text-red-600" },
 ]
 
-export default function RelationshipSidebar({ edge, assets, onClose, onUpdate, onDelete }: RelationshipSidebarProps) {
+export default function RelationshipSidebar({ edge, assets, onClose, onUpdate, onDelete, isLoading = false, error = null }: RelationshipSidebarProps) {
   const relationship = edge.data?.relationship
   const [type, setType] = useState(relationship?.type || "DEPENDS_ON")
-  const [criticality, setCriticality] = useState(relationship?.criticality || "MEDIUM")
+  const [criticality, setCriticality] = useState(relationship?.criticality || "medium")
   const [isEditing, setIsEditing] = useState(false)
 
   const sourceAsset = assets.find(a => a.id === edge.source)
@@ -41,7 +44,7 @@ export default function RelationshipSidebar({ edge, assets, onClose, onUpdate, o
 
   const handleCancel = () => {
     setType(relationship?.type || "DEPENDS_ON")
-    setCriticality(relationship?.criticality || "MEDIUM")
+    setCriticality(relationship?.criticality || "medium")
     setIsEditing(false)
   }
 
@@ -162,14 +165,20 @@ export default function RelationshipSidebar({ edge, assets, onClose, onUpdate, o
             <div className="flex gap-2">
               <button
                 onClick={handleSave}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-brand-1 text-white rounded-lg hover:bg-brand-2 transition-colors"
+                disabled={isLoading}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-brand-1 text-white rounded-lg hover:bg-brand-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Save className="w-4 h-4" />
-                Save
+                {isLoading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                {isLoading ? "Saving..." : "Save"}
               </button>
               <button
                 onClick={handleCancel}
-                className="flex-1 px-3 py-2 bg-surface-secondary text-text-secondary rounded-lg hover:bg-surface-tertiary transition-colors"
+                disabled={isLoading}
+                className="flex-1 px-3 py-2 bg-surface-secondary text-text-secondary rounded-lg hover:bg-surface-tertiary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
@@ -177,14 +186,27 @@ export default function RelationshipSidebar({ edge, assets, onClose, onUpdate, o
           )}
         </div>
 
+        {/* Error Message */}
+        {error && (
+          <div className="p-3 bg-error-bg border border-error-border rounded-lg flex gap-2 items-start">
+            <AlertCircle className="w-4 h-4 text-error-text flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-error-text">{error}</div>
+          </div>
+        )}
+
         {/* Delete Section */}
         <div className="pt-4 border-t border-border">
           <button
             onClick={onDelete}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-error-text hover:bg-error-bg rounded-lg transition-colors"
+            disabled={isLoading}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-error-text hover:bg-error-bg rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Trash2 className="w-4 h-4" />
-            Delete Relationship
+            {isLoading ? (
+              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+            {isLoading ? "Deleting..." : "Delete Relationship"}
           </button>
         </div>
 
