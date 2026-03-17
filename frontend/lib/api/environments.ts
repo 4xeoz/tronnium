@@ -2,7 +2,7 @@
  * Environment API - CRUD operations for environments
  */
 
-import { apiFetch } from "./client";
+import { apiFetch, ApiResponse } from "./client";
 
 // Types
 export type Environment = {
@@ -22,15 +22,15 @@ export type CreateEnvironmentInput = {
 };
 
 // API Functions
-export async function getEnvironments(): Promise<Environment[]> {
+export async function getEnvironments(): Promise<ApiResponse<Environment[]>> {
   return apiFetch<Environment[]>("/environments");
 }
 
-export async function getEnvironment(id: string): Promise<Environment> {
+export async function getEnvironment(id: string): Promise<ApiResponse<Environment>> {
   return apiFetch<Environment>(`/environments/${id}`);
 }
 
-export async function createEnvironment(data: CreateEnvironmentInput): Promise<Environment> {
+export async function createEnvironment(data: CreateEnvironmentInput): Promise<ApiResponse<Environment>> {
   return apiFetch<Environment>("/environments", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -2,7 +2,7 @@
  * Auth API - Authentication related operations
  */
 
-import { apiFetch, getBackendUrl } from "./client";
+import { apiFetch, ApiResponse, getBackendUrl } from "./client";
 
 // Types
 export type User = {
@@ -15,9 +15,14 @@ export type User = {
 // API Functions
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    return await apiFetch<User>("/auth/me");
+    const response = await apiFetch<User>("/auth/me");
+    if (!response.success) {
+      throw new Error(response.message || "Failed to fetch user");
+    }
+    return response.data;
   } catch {
-    return null;
+    throw new Error("Not authenticated");
+    
   }
 }
 
