@@ -8,7 +8,7 @@ import type { PublicUser } from "../types/express";
  */
 
 const VALID_TYPES = ["DEPENDS_ON", "CONTROLS", "PROVIDES_SERVICE", "SHARES_DATA_WITH"];
-const VALID_CRITICALITIES = ["low", "medium", "high"];
+const VALID_CRITICALITIES = ["LOW", "MEDIUM", "HIGH"];
 
 /**
  * Verify environment belongs to authenticated user
@@ -91,7 +91,7 @@ export async function createRelationshipHandler(req: Request, res: Response) {
       });
     }
 
-    if (!criticality || !VALID_CRITICALITIES.includes(criticality.toLowerCase())) {
+    if (!criticality || !VALID_CRITICALITIES.includes(criticality.toUpperCase())) {
       return res.status(400).json({
         success: false,
         message: `Criticality must be one of: ${VALID_CRITICALITIES.join(", ")}`,
@@ -120,6 +120,7 @@ export async function createRelationshipHandler(req: Request, res: Response) {
     if (!fromAsset || !toAsset) {
       return res.status(404).json({
         success: false,
+        data: null,
         message: "One or both assets not found in this environment",
       });
     }
@@ -134,9 +135,28 @@ export async function createRelationshipHandler(req: Request, res: Response) {
       },
     });
 
+    // prevent closed loop relationships.
+      const loopCheck = await prisma.relationship.findFirst({ 
+        where: {
+          fromAssetId: toAssetId,
+          toAssetId: fromAssetId,
+          type,
+          environmentId,
+        },
+      });
+
+      if (loopCheck) {
+        return res.status(400).json({
+          success: false,
+          data: null,
+          message: "Creating this relationship would create a closed loop. Please choose a different type or assets.",
+        });
+      }
+
     if (existing) {
       return res.status(409).json({
         success: false,
+        data: null,
         message: "This relationship already exists",
       });
     }
@@ -148,7 +168,7 @@ export async function createRelationshipHandler(req: Request, res: Response) {
         fromAssetId,
         toAssetId,
         type,
-        criticality: criticality.toLowerCase(),
+        criticality: criticality.toUpperCase(),
       },
       include: {
         fromAsset: { select: { id: true, name: true, type: true } },
@@ -165,6 +185,7 @@ export async function createRelationshipHandler(req: Request, res: Response) {
     console.error("[Create Relationship] Error:", error);
     return res.status(500).json({
       success: false,
+      data: null,
       message: "Failed to create relationship",
     });
   }
@@ -215,13 +236,13 @@ export async function updateRelationshipHandler(req: Request, res: Response) {
     }
 
     if (criticality) {
-      if (!VALID_CRITICALITIES.includes(criticality.toLowerCase())) {
+      if (!VALID_CRITICALITIES.includes(criticality.toUpperCase())) {
         return res.status(400).json({
           success: false,
           message: `Criticality must be one of: ${VALID_CRITICALITIES.join(", ")}`,
         });
       }
-      updates.criticality = criticality.toLowerCase();
+      updates.criticality = criticality.toUpperCase();
     }
 
     // Update

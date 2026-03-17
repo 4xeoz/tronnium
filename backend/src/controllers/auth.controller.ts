@@ -47,12 +47,18 @@ export function profileHandler(req: Request, res: Response) {
 
   const user = req.user as PublicUser;
 
-  return res.json({
-    email: user.email,
-    name: user.name,
-    role: user.role,
-    avatarUrl: user.avatarUrl,
-  });
+  return res.json(
+    {
+      success: true,
+      data: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      message: "User profile fetched successfully.",
+    }
+  );
 }
 
 
@@ -64,6 +70,6 @@ export function logoutHandler() {
       path: "/",        // must match set cookie
       sameSite: "lax",
     });
-    return res.json({ success: true });
+    return res.json({ success: true, message: "Logged out successfully." });
   };
 }

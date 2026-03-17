@@ -23,7 +23,6 @@ const typeIcons: Record<string, React.ElementType> = {
   server: FiServer,
   database: FiDatabase,
   network: FiWifi,
-  firewall: FiShield,
   iot: FiHardDrive,
   unknown: FiCpu,
 };

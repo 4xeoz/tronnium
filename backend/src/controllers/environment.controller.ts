@@ -10,13 +10,13 @@ export async function createEnvironmentHandler(req: Request, res: Response) {
   const user = req.user as PublicUser;
   
   if (!user) {
-    return res.status(401).json({ message: "Not authenticated." });
+    return res.status(401).json({ success: false,  message: "Not authenticated." });
   }
 
   const { name, description, labels } = req.body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
-    return res.status(400).json({ message: "Name is required." });
+    return res.status(400).json({sucess: false ,  message: "Name is required." });
   }
 
   try {
@@ -29,7 +29,7 @@ export async function createEnvironmentHandler(req: Request, res: Response) {
     return res.status(201).json(environmentService.toPublic(environment));
   } catch (error) {
     console.error("Error creating environment:", error);
-    return res.status(500).json({ message: "Failed to create environment." });
+    return res.status(500).json({ sucess: false, message: "Failed to create environment." });
   }
 }
 
@@ -48,7 +48,7 @@ export async function getEnvironmentsHandler(req: Request, res: Response) {
   }
   
     const environments = await environmentService.findAllByOwnerWithAssetCount(user.id);
-    return res.json(environments);
+    return res.json({ success: true, data: environments, message: "Environments fetched successfully." });
   } catch (error) {
     console.error("Error fetching environments:", error);
     return res.status(500).json({ message: "Failed to fetch environments." });
@@ -64,17 +64,17 @@ export async function getEnvironmentByIdHandler(req: Request, res: Response) {
   const { id } = req.params;
 
   if (!user) {
-    return res.status(401).json({ message: "Not authenticated." });
+    return res.status(401).json({sucess: false, message: "Not authenticated." });
   }
 
   try {
     const environment = await environmentService.findByIdAndOwner(id, user.id);
 
     if (!environment) {
-      return res.status(404).json({ message: "Environment not found." });
+      return res.status(404).json({ success: false, message: "Environment not found." });
     }
 
-    return res.json(environmentService.toPublic(environment));
+    return res.json({ success: true, data: environmentService.toPublic(environment), message: "Environment fetched successfully." });
   } catch (error) {
     console.error("Error fetching environment:", error);
     return res.status(500).json({ message: "Failed to fetch environment." });
