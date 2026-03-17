@@ -70,6 +70,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     const isInEnvironment = !!envId;
     const isInDashboard = pathname.endsWith("/dashboard");
     const isInMap = pathname.endsWith("/map");
+    const isInSecurity = pathname.endsWith("/security");
 
     // Redirect to home if not authenticated
     useEffect(() => {
@@ -133,9 +134,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
                                 isActive={isInMap}
                             />
                             <NavButton
-                                href={`/environments/${envId}/dashboard?tab=security`}
+                                href={`/environments/${envId}/security`}
                                 icon={FiShield}
                                 title="Security"
+                                isActive={isInSecurity}
                             />
                         </>
                     )}

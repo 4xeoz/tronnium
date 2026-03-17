@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback, ReactNode } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import {
   FiBox,
   FiServer,
-  FiShield,
-  FiAlertTriangle,
-  FiActivity,
   FiPlus,
   FiCpu,
   FiChevronRight,
@@ -15,17 +12,12 @@ import {
   FiWifi,
   FiHardDrive,
   FiSearch,
-  FiZap,
-  FiBarChart2,
-  FiMessageSquare,
 } from "react-icons/fi";
 import { getEnvironment, getAssets, type Environment, type Asset } from "@/lib/api";
 import AddAssetSlideOver from "@/components/assets/AddAssetSlideOver";
 import AssetDetailsSlideOver from "@/components/assets/AssetDetailsSlideOver";
 
 // ============== Shared helpers ==============
-
-type Tab = "assets" | "security";
 
 const typeIcons: Record<string, React.ElementType> = {
   server: FiServer,
@@ -181,105 +173,11 @@ function AssetCard({
   );
 }
 
-// ============== Security Tab (placeholder) ==============
-
-function SecurityTab() {
-  const features = [
-    {
-      icon: <FiSearch className="w-5 h-5" />,
-      title: "Vulnerability Scanning",
-      description: "Scan assets for known CVEs using NVD and CPE matching.",
-    },
-    {
-      icon: <FiBarChart2 className="w-5 h-5" />,
-      title: "Risk Scoring & CVSS",
-      description:
-        "Calculated risk scores per asset and environment, with CVSS breakdowns and dependency analysis.",
-    },
-    {
-      icon: <FiMessageSquare className="w-5 h-5" />,
-      title: "AI-Powered Analysis",
-      description:
-        "LLM explains vulnerabilities in plain language, suggests remediation steps, and prioritizes for SOC analysts.",
-    },
-    {
-      icon: <FiZap className="w-5 h-5" />,
-      title: "Continuous Monitoring",
-      description:
-        "Scheduled scans with alerting, trend tracking, and compliance reporting.",
-    },
-  ];
-
-  return (
-    <div className="space-y-6">
-      {/* Overview cards - placeholder stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          icon={<FiAlertTriangle className="w-5 h-5 text-brand-1" />}
-          label="Vulnerabilities"
-          value="--"
-          sub="Not scanned"
-        />
-        <StatCard
-          icon={<FiShield className="w-5 h-5 text-brand-1" />}
-          label="Risk Score"
-          value="--"
-        />
-        <StatCard
-          icon={<FiActivity className="w-5 h-5 text-brand-1" />}
-          label="Last Scan"
-          value="Never"
-        />
-        <StatCard
-          icon={<FiBarChart2 className="w-5 h-5 text-brand-1" />}
-          label="Compliance"
-          value="--"
-        />
-      </div>
-
-      {/* Feature cards */}
-      <div>
-        <SectionHeader title="Coming Soon" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {features.map((f) => (
-            <div
-              key={f.title}
-              className="bg-surface rounded-xl border border-border p-5 flex items-start gap-4"
-            >
-              <div className="w-10 h-10 rounded-lg bg-brand-1/10 flex items-center justify-center shrink-0 text-brand-1">
-                {f.icon}
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-text-primary mb-1">
-                  {f.title}
-                </h3>
-                <p className="text-xs text-text-secondary leading-relaxed">
-                  {f.description}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Empty state CTA */}
-      <EmptyState
-        icon={<FiShield className="w-6 h-6 text-text-muted" />}
-        title="Security analysis not configured"
-        description="Once vulnerability scanning is enabled, risk scores, CVE details, and AI-powered remediation advice will appear here."
-      />
-    </div>
-  );
-}
-
 // ============== Main Page ==============
 
 export default function EnvironmentDashboardPage() {
   const params = useParams();
-  const searchParams = useSearchParams();
   const envId = params.envId as string;
-
-  const initialTab = (searchParams.get("tab") as Tab) || "assets";
 
   const [environment, setEnvironment] = useState<Environment | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -287,7 +185,6 @@ export default function EnvironmentDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [isAddAssetOpen, setIsAddAssetOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [assetSearch, setAssetSearch] = useState("");
 
   const loadEnvironment = useCallback(async () => {
@@ -343,11 +240,6 @@ export default function EnvironmentDashboardPage() {
     );
   }
 
-  const tabs: { id: Tab; label: string; icon: React.ElementType; count?: number }[] = [
-    { id: "assets", label: "Assets", icon: FiServer, count: assets.length },
-    { id: "security", label: "Security", icon: FiShield },
-  ];
-
   return (
     <div className="p-8 h-full overflow-auto space-y-6 max-w-7xl mx-auto">
       {/* Page Header */}
@@ -375,38 +267,8 @@ export default function EnvironmentDashboardPage() {
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b border-border">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-              activeTab === tab.id
-                ? "border-brand-1 text-text-primary"
-                : "border-transparent text-text-muted hover:text-text-secondary"
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-            {tab.count !== undefined && (
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
-                  activeTab === tab.id
-                    ? "bg-brand-1/15 text-text-primary"
-                    : "bg-surface-secondary text-text-muted"
-                }`}
-              >
-                {tab.count}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      {activeTab === "assets" && (
-        <div className="space-y-6">
+      {/* Assets content */}
+      <div className="space-y-6">
           {/* Quick stats row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
@@ -496,9 +358,6 @@ export default function EnvironmentDashboardPage() {
             </div>
           )}
         </div>
-      )}
-
-      {activeTab === "security" && <SecurityTab />}
 
       {/* Slide overs */}
       <AddAssetSlideOver
