@@ -297,8 +297,8 @@ export default function EnvironmentDashboardPage() {
         getEnvironment(envId),
         getAssets(envId),
       ]);
-      setEnvironment(envData);
-      setAssets(assetsData);
+      setEnvironment(envData.data);
+      setAssets(assetsData.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load environment");
     } finally {

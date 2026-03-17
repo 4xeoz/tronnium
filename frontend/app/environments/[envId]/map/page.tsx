@@ -30,9 +30,19 @@ import ReactFlow, {
   Node,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
+import { updateAseetPosition } from '@/lib/api/assets'
+import { useRef } from 'react'
+import { on } from 'events'
+
+
 
 const nodeTypes = { asset: AssetNode }
 const edgeTypes = { dependency: DependencyEdge }
+
+
+
+
+
 
 const Page = () => {
   const params = useParams()
@@ -41,19 +51,23 @@ const Page = () => {
 
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<any>(null)
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null)
+
+  // To track pending position updates for debouncing
+  const positionUpdateTimeouts = useRef<{ [id: string]: NodeJS.Timeout }>({})
+
 
   // ===== QUERIES =====
 
-  const { data: assets, isLoading: assetsLoading } = useQuery({
+  const { data: ResponseOfAssets, isLoading: assetsLoading } = useQuery({
     queryKey: ['assets', envId],
     queryFn: async () => getAssets(envId),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
 
-  const { data: relationships, isLoading: relationshipsLoading } = useQuery({
+  const { data: ResponseOfrelationships, isLoading: relationshipsLoading } = useQuery({
     queryKey: ['relationships', envId],
     queryFn: async () => getAllRelationships(envId),
     staleTime: 5 * 60 * 1000,
@@ -73,8 +87,9 @@ const Page = () => {
       queryClient.invalidateQueries({ queryKey: ['relationships', envId] })
       setError(null)
     },
-    onError: (err) => {
-      const msg = err instanceof Error ? err.message : 'Failed to create relationship'
+    onError: (err: any) => {
+      const msg = err.message || 'Failed to create relationship'
+      console.error(msg)
       setError(msg)
     },
   })
@@ -109,13 +124,32 @@ const Page = () => {
     },
   })
 
+  const updatePositionMutation = useMutation({
+    mutationFn: ({assetId, x, y}: {assetId: string, x: number, y: number}) => updateAseetPosition(envId, assetId, x, y),
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : 'Failed to update asset position'
+      setError(msg)
+    },
+  })
+
+  // Extract assets and relationships from responses
+
+  const assets = ResponseOfAssets?.data || [];
+
   // ===== NODE/EDGE CONVERSION =====
 
   const assetNodes = useMemo(() => {
-    if (!assets) return [] as Node[]
+    if (!ResponseOfAssets) return [] as Node[]
+
+    if (ResponseOfAssets.success === false) {
+      setError(ResponseOfAssets.message || 'Failed to load assets')
+      return [] as Node[]
+    }
+
     const cols = 3
     const xGap = 240
     const yGap = 120
+
 
     return assets.map((asset, idx) => ({
       id: asset.id,
@@ -126,10 +160,17 @@ const Page = () => {
       },
       data: { asset, label: asset.name },
     })) as Node[]
-  }, [assets])
+  }, [ResponseOfAssets])
 
   const relationshipEdges = useMemo(() => {
-    if (!relationships) return [] as Edge[]
+    if (!ResponseOfrelationships) return [] as Edge[]
+
+    if (ResponseOfrelationships.success === false) {
+      setError(ResponseOfrelationships.message || 'Failed to load relationships')
+      return [] as Edge[]
+    }
+    
+    const relationships = ResponseOfrelationships.data
 
     return relationships.map((rel) => ({
       id: rel.id,
@@ -138,7 +179,7 @@ const Page = () => {
       type: 'dependency',
       data: { relationship: rel },
     })) as Edge[]
-  }, [relationships])
+  }, [ResponseOfrelationships])
 
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -169,10 +210,10 @@ const Page = () => {
     }
 
     // Check if relationship already exists
-    const exists = relationships?.some(
+    const exists = relationshipEdges?.some(
       (rel) =>
-        rel.fromAssetId === connection.source &&
-        rel.toAssetId === connection.target
+        rel.source === connection.source &&
+        rel.target === connection.target
     )
 
     if (exists) {
@@ -183,7 +224,7 @@ const Page = () => {
 
     // Store for modal confirmation
     setPendingConnection(connection)
-  }, [relationships])
+  }, [relationshipEdges])
 
   const handleCreateRelationship = (type: RelationType, criticality: CriticalityLevel) => {
     if (!pendingConnection?.source || !pendingConnection?.target) return
@@ -212,6 +253,38 @@ const Page = () => {
     setSelectedEdge(null)
   }, [])
 
+
+  // Debounce position updates fucntion 
+  const debouncedUpdatePosition = (assetId: string, x: number, y: number) => {
+
+  // Clear any existing timeout for this asset
+  if (positionUpdateTimeouts.current[assetId]) {
+    clearTimeout(positionUpdateTimeouts.current[assetId])
+  }
+  // Set a new timeout
+  positionUpdateTimeouts.current[assetId] = setTimeout(() => {
+    updatePositionMutation.mutate({ assetId, x, y })
+  }, 500)
+  }
+
+  // Handle node drag stop to update position
+  const handleNodesChange = useCallback((changes: any[]) => {
+    onNodesChange(changes) // still update the local state immediately for smooth dragging
+
+    changes.forEach((change) => {
+      if (change.type === 'position' && change.dragging === false && change.id) {
+        const node = nodes.find((n) => n.id === change.id)
+        if (node) {
+          debouncedUpdatePosition(node.id, node.position.x, node.position.y)
+        }
+      }
+    })
+
+  }, [onNodesChange, nodes])
+
+
+
+  
   // ===== RENDER =====
 
   const isLoading = assetsLoading || relationshipsLoading
@@ -233,7 +306,7 @@ const Page = () => {
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          onNodesChange={onNodesChange}
+          onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={onNodeClick}

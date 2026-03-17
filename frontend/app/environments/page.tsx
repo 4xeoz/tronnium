@@ -229,7 +229,11 @@ export default function EnvironmentsPage() {
   const loadEnvironments = useCallback(async () => {
     try {
       setError(null);
-      const data = await getEnvironments();
+      const { success, data, message} = await getEnvironments();
+      if (!success) {
+        setError(message || "Failed to load environments");
+        return;
+      }
       setEnvironments(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load environments");

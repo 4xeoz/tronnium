@@ -26,6 +26,8 @@ export function UserProvider({
     setLoading(true);
     try {
       const userData = await getCurrentUser();
+      // console.log('Fetched user data:', userData);
+      
       setUser(userData);
     } catch (error) {
       console.error('Failed to fetch user:', error);

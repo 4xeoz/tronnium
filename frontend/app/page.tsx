@@ -16,7 +16,7 @@ export default function Home() {
     const loadHealth = async () => {
       try {
         const healthStatus = await getHealth();
-        setStatus(healthStatus);
+        setStatus(healthStatus.data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to reach backend");
       }
