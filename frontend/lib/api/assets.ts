@@ -3,7 +3,7 @@
  */
 
 import { env } from "process";
-import { apiFetch } from "./client";
+import { apiFetch, ApiResponse } from "./client";
 
 // Types
 export type Asset = {
@@ -25,6 +25,22 @@ export type Asset = {
   tags: string[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type RelationType = "DEPENDS_ON" | "CONTROLS" | "PROVIDES_SERVICE" | "SHARES_DATA_WITH";
+export type CriticalityLevel = "low" | "medium" | "high";
+
+export type Relationship = {
+  id: string;
+  environmentId: string;
+  fromAssetId: string;
+  toAssetId: string;
+  type: RelationType;
+  criticality: CriticalityLevel;
+  createdAt: string;
+  updatedAt: string;
+  fromAsset?: { id: string; name: string; type: string };
+  toAsset?: { id: string; name: string; type: string };
 };
 
 export type CpeCandidate = {
@@ -95,7 +111,7 @@ export type CreateAssetInput = {
  * Find CPE candidates from an asset name
  * @deprecated Use listenForCpeFindProgress for real-time updates
  */
-export async function findCpe(assetName: string, topN: number = 5): Promise<CpeFindResponse> {
+export async function findCpe(assetName: string, topN: number = 5): Promise<ApiResponse<CpeFindResponse>> {
   const params = new URLSearchParams({
     assetName,
     topN: topN.toString(),
@@ -153,7 +169,7 @@ export function listenForCpeFindProgress(
 /**
  * Validate a CPE string
  */
-export async function validateCpe(cpeString: string): Promise<CpeValidateResponse> {
+export async function validateCpe(cpeString: string): Promise<ApiResponse<CpeValidateResponse>> {
   return apiFetch<CpeValidateResponse>("/assets/cpe/validate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -164,11 +180,11 @@ export async function validateCpe(cpeString: string): Promise<CpeValidateRespons
 /**
  * Get all assets for an environment
  */
-export async function getAssets(environmentId: string): Promise<Asset[]> {
-  const response = await apiFetch<{ success: boolean; assets: Asset[] }>(
+export async function getAssets(environmentId: string): Promise<ApiResponse<Asset[]>> {
+  return apiFetch<Asset[]>(
     `/assets/${environmentId}`
   );
-  return response.assets;
+
 }
 
 /**
@@ -177,8 +193,8 @@ export async function getAssets(environmentId: string): Promise<Asset[]> {
 export async function createAsset(
   environmentId: string,
   data: CreateAssetInput
-): Promise<Asset> {
-  const response = await apiFetch<{ success: boolean; asset: Asset }>(
+): Promise<ApiResponse<Asset>> {
+  const response = await apiFetch<Asset>(
     `/assets/${environmentId}`,
     {
       method: "POST",
@@ -186,7 +202,7 @@ export async function createAsset(
       body: JSON.stringify(data),
     }
   );
-  return response.asset;
+  return response;
 }
 
 
@@ -205,5 +221,87 @@ export async function deleteAsset(
   );
 
 }
+
+
+export async function getAllRelationships(environmentId: string): Promise<ApiResponse<Relationship[]>> {
+  const response = await apiFetch<Relationship[]>(
+    `/relationships/${environmentId}`,
+    {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    }
+  );
+  return response;
+}
+
+export async function createRelationship(
+  environmentId: string,
+  fromAssetId: string,
+  toAssetId: string,
+  type: RelationType,
+  criticality: CriticalityLevel
+): Promise<ApiResponse<any>> {
+  const response = await apiFetch<ApiResponse<any>>(
+    `/relationships/${environmentId}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromAssetId, toAssetId, type, criticality }),
+    }
+  );
+  return response;
+}
+
+
+export async function updateRelationship(
+  environmentId: string,
+  relationshipId: string,
+  type?: RelationType,
+  criticality?: CriticalityLevel
+): Promise<ApiResponse<Relationship>> {
+  const response = await apiFetch<Relationship>(
+    `/relationships/${environmentId}/${relationshipId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...(type && { type }), ...(criticality && { criticality }) }),
+    }
+  );
+  return response;
+}
+
+export async function deleteRelationship(
+  environmentId: string,
+  relationshipId: string
+): Promise<{ success: boolean; message: string }> {
+  return apiFetch<{ success: boolean; message: string }>(
+    `/relationships/${environmentId}/${relationshipId}`,
+    {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    }
+  );
+} 
+
+
+export async function updateAseetPosition(
+  environmentId: string,
+  assetId: string,
+  x: number,
+  y: number
+): Promise<ApiResponse<Asset>> {
+  const response = await apiFetch<Asset>(
+    `/assets/${environmentId}/${assetId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({x, y}),
+    }
+  );
+  console.log("Position update response:", response);
+  return response;
+}
+
+
     
 

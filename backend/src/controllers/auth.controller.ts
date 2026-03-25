@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { appConfig } from "../config/config";
 import type { PublicUser } from "../services/user.service";
+import { userService } from "../services/user.service";
 
 export function googleAuthHandler(req: Request, res: Response) {
   // This will redirect to Google
@@ -39,20 +40,29 @@ res.cookie("token", token, {
   return res.redirect(`${appConfig.frontendUrl}/environments`);
 }
 
-export function profileHandler(req: Request, res: Response) {
+export async function profileHandler(req: Request, res: Response) {
   console.log("Profile handler called, jwt successful, payload:", req.user);
   if (!req.user) {
     return res.status(401).json({ message: "Not authenticated." });
   }
 
-  const user = req.user as PublicUser;
+  // Fetch fresh user data from database to include devMode
+  const userId = (req.user as PublicUser).id;
+  const user = await userService.findById(userId);
+  
+  if (!user) {
+    return res.status(404).json({ message: "User not found." });
+  }
 
-  return res.json({
-    email: user.email,
-    name: user.name,
-    role: user.role,
-    avatarUrl: user.avatarUrl,
-  });
+  const publicUser = userService.toPublic(user);
+
+  return res.json(
+    {
+      success: true,
+      data: publicUser,
+      message: "User profile fetched successfully.",
+    }
+  );
 }
 
 
@@ -64,6 +74,30 @@ export function logoutHandler() {
       path: "/",        // must match set cookie
       sameSite: "lax",
     });
-    return res.json({ success: true });
+    return res.json({ success: true, message: "Logged out successfully." });
   };
+}
+
+export async function toggleDevModeHandler(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Not authenticated." });
+    }
+
+    const updatedUser = await userService.toggleDevMode(userId);
+    const publicUser = userService.toPublic(updatedUser);
+
+    return res.json({
+      success: true,
+      data: publicUser,
+      message: `Dev mode ${publicUser.devMode ? "enabled" : "disabled"} successfully.`,
+    });
+  } catch (error) {
+    console.error("Toggle dev mode error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to toggle dev mode.",
+    });
+  }
 }

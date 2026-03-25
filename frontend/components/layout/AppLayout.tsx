@@ -5,8 +5,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useUser } from "@/lib/UserContext";
+import { useScan } from "@/lib/ScanContext";
 import ThemeToggle from "@/components/ui/ThemeToggle";
-import { FiBox, FiSettings, FiLogOut, FiBell, FiUser, FiArrowLeft, FiMap, FiGrid, FiShield } from "react-icons/fi";
+import ScanProgressPopup from "@/components/scan/ScanProgressPopup";
+import { FiBox, FiSettings, FiLogOut, FiBell, FiUser, FiArrowLeft, FiMap, FiGrid, FiShield, FiCode } from "react-icons/fi";
 
 interface AppLayoutProps {
     children: React.ReactNode;
@@ -31,34 +33,71 @@ function NavButton({
     icon: Icon, 
     title,
     onClick,
+    indicator,
+    variant = "default",
 }: { 
     href?: string; 
     isActive?: boolean; 
     icon: React.ElementType; 
     title: string;
     onClick?: () => void;
+    indicator?: React.ReactNode;
+    variant?: "default" | "dev";
 }) {
-    const baseClass = "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200";
-    const activeClass = isActive ? "bg-brand-2" : "hover:bg-surface-secondary";
-    const iconClass = `w-5 h-5 ${isActive ? "text-white" : "text-text-secondary"}`;
+    const baseClass = "relative w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200";
+    
+    // Variant-based styling
+    const getActiveClass = () => {
+        if (isActive) return "bg-brand-2";
+        if (variant === "dev") return "hover:bg-purple-500/10";
+        return "hover:bg-surface-secondary";
+    };
+    
+    const getIconClass = () => {
+        if (isActive) return "text-white";
+        if (variant === "dev") return "text-purple-500";
+        return "text-text-secondary";
+    };
 
     const button = onClick ? (
-        <button onClick={onClick} className={`${baseClass} ${activeClass}`}>
-            <Icon className={iconClass} />
+        <button onClick={onClick} className={`${baseClass} ${getActiveClass()}`}>
+            <Icon className={`w-5 h-5 ${getIconClass()}`} />
+            {indicator}
         </button>
     ) : (
-        <Link href={href || "#"} className={`${baseClass} ${activeClass}`}>
-            <Icon className={iconClass} />
+        <Link href={href || "#"} className={`${baseClass} ${getActiveClass()}`}>
+            <Icon className={`w-5 h-5 ${getIconClass()}`} />
+            {indicator}
         </Link>
     );
 
     return <Tooltip text={title}>{button}</Tooltip>;
 }
 
+// Pulsing dot indicator for active operations
+function PulsingDot({ color = "bg-brand-1" }: { color?: string }) {
+    return (
+        <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${color} opacity-75`}></span>
+            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${color}`}></span>
+        </span>
+    );
+}
+
+// Badge with count
+function Badge({ count, color = "bg-error-text" }: { count: number; color?: string }) {
+    return (
+        <span className={`absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full ${color} px-1 text-[9px] font-bold text-white`}>
+            {count > 99 ? "99+" : count}
+        </span>
+    );
+}
+
 export default function AppLayout({ children }: AppLayoutProps) {
     const pathname = usePathname();
     const router = useRouter();
     const { user, loading, logout } = useUser();
+    const { isScanning, scanResult, error, environmentId } = useScan();
 
     const isEnvironmentsList = pathname === "/environments";
     
@@ -70,6 +109,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
     const isInEnvironment = !!envId;
     const isInDashboard = pathname.endsWith("/dashboard");
     const isInMap = pathname.endsWith("/map");
+    const isInSecurity = pathname.endsWith("/security");
+    const isInDev = pathname.endsWith("/dev");
+    
+    // Check if scanning current environment
+    const isScanningThisEnv = isScanning && environmentId === envId;
+    const hasScanResult = scanResult && environmentId === envId;
+    const hasScanError = error && environmentId === envId;
 
     // Redirect to home if not authenticated
     useEffect(() => {
@@ -133,10 +179,32 @@ export default function AppLayout({ children }: AppLayoutProps) {
                                 isActive={isInMap}
                             />
                             <NavButton
-                                href={`/environments/${envId}/dashboard?tab=security`}
+                                href={`/environments/${envId}/security`}
                                 icon={FiShield}
                                 title="Security"
+                                isActive={isInSecurity}
+                                indicator={
+                                    isScanningThisEnv ? (
+                                        <PulsingDot color="bg-brand-1" />
+                                    ) : hasScanError ? (
+                                        <PulsingDot color="bg-error-text" />
+                                    ) : hasScanResult && scanResult.vulnerabilitiesFound > 0 ? (
+                                        <Badge 
+                                            count={scanResult.vulnerabilitiesFound} 
+                                            color={scanResult.criticalCount > 0 ? "bg-red-500" : "bg-orange-500"}
+                                        />
+                                    ) : null
+                                }
                             />
+                            {user?.devMode && (
+                                <NavButton
+                                    href={`/environments/${envId}/dev`}
+                                    icon={FiCode}
+                                    title="Dev Mode"
+                                    isActive={isInDev}
+                                    variant="dev"
+                                />
+                            )}
                         </>
                     )}
                     {!isInEnvironment && (
@@ -192,6 +260,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <main className="flex-1 bg-surface overflow-auto">
                 {children}
             </main>
+
+            {/* Scan Progress Popup - shows across all environment pages */}
+            <ScanProgressPopup />
         </div>
     );
 }

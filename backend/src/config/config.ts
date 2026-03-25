@@ -2,7 +2,7 @@ import "dotenv/config";
 import type { SignOptions, Secret } from "jsonwebtoken";
 
 const jwtSecret = (process.env.JWT_SECRET || "insecure-dev-secret") as Secret;
-const jwtExpiresIn = (process.env.JWT_EXPIRES_IN || "1h") as SignOptions["expiresIn"];
+const jwtExpiresIn = (process.env.JWT_EXPIRES_IN || "24h") as SignOptions["expiresIn"];
 
 export const appConfig = {
   port: Number(process.env.PORT) || 4000,

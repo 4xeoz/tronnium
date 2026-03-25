@@ -273,6 +273,7 @@ export async function getAssetsHandler(req: Request, res: Response) {
         const { environmentId } = req.params;
         const user = req.user as PublicUser;
 
+
         // Verify environment belongs to user
         const environment = await prisma.environment.findFirst({
             where: {
@@ -296,13 +297,13 @@ export async function getAssetsHandler(req: Request, res: Response) {
 
         return res.json({
             success: true,
-            assets,
+            data: assets,
+            message: `Found ${assets.length} assets in environment ${environmentId}`,
         });
     } catch (error) {
         console.error("[Get Assets] Error:", error);
         return res.status(500).json({
             success: false,
-            error: "SERVER_ERROR",
             message: "Failed to get assets",
         });
     }
@@ -369,7 +370,6 @@ export async function createAssetHandler(req: Request, res: Response) {
         if (!environment) {
             return res.status(404).json({
                 success: false,
-                error: "NOT_FOUND",
                 message: "Environment not found",
             });
         }
@@ -403,19 +403,17 @@ export async function createAssetHandler(req: Request, res: Response) {
             },
         });
 
-        console.log(`[Create Asset] Created asset "${name}" with ${selectedCpes.length} CPEs in environment ${environmentId}`);
 
         return res.status(201).json({
             success: true,
-            asset,
+            data: asset,
+            message: "Asset created successfully",
         });
     } catch (error) {
         console.error("[Create Asset] Error:", error);
         return res.status(500).json({
             success: false,
-            error: "SERVER_ERROR",
             message: "Failed to create asset",
-            detail: process.env.NODE_ENV === "development" ? String(error) : undefined,
         });
     }
 }
@@ -464,7 +462,6 @@ export async function deleteAssetHandler(req: Request, res: Response) {
         
             return res.status(404).json({ 
                 success: false, 
-                error: "NOT_FOUND", 
                 message: "Asset not found in this environment"
             }); 
         }
@@ -481,11 +478,84 @@ export async function deleteAssetHandler(req: Request, res: Response) {
         console.error("[Delete Asset] Error:", error);
         return res.status(500).json({
             success: false,
-            error: "SERVER_ERROR",
             message: "Failed to delete asset",
-            detail: process.env.NODE_ENV === "development" ? String(error) : undefined,
         });
     }
 }
+
+export async function updateAssetHandler(req: Request, res: Response) {
+    try {
+        const { environmentId, assetId } = req.params;
+        const user = req.user as PublicUser;
+        const { name, description, domain, type, status, location, ipAddress, x, y } = req.body;
+
+        console.log(`[Update Asset] User ${user.id} updating asset ${assetId} in environment ${environmentId} with data:`, req.body);
+
+       // authorization checks (same as delete handler)
+         const environment = await prisma.environment.findFirst({
+          where: {
+                id: environmentId,
+                ownerId: user.id,
+          },
+     });
+        if (!environment) {
+            return res.status(404).json({
+                success: false,
+                message: "Environment not found",
+            });
+        }
+
+        const asset = await prisma.asset.findFirst({
+            where: { 
+                id: assetId, 
+                environmentId: environmentId, 
+            },
+        });
+        
+        if (!asset) {
+            return res.status(404).json({
+                success: false,
+                message: "Asset not found in this environment",
+            });
+        }
+
+        // Prepare update data
+        const updateData: any = {};
+        if (name && typeof name === "string") updateData.name = name.trim();
+        if (description && typeof description === "string") updateData.description = description.trim();
+        if (domain && typeof domain === "string") updateData.domain = domain.trim();
+        if (type && typeof type === "string") updateData.type = type.trim();
+        if (status && typeof status === "string") updateData.status = status.trim();
+        if (location && typeof location === "string") updateData.location = location.trim();
+        if (ipAddress && typeof ipAddress === "string") updateData.ipAddress = ipAddress.trim();
+        if (typeof x === "number") updateData.x = x;
+        if (typeof y === "number") updateData.y = y;
+
+        // Update the Asset
+        const updated = await prisma.asset.update({
+            where: { id: assetId },
+            data: updateData,
+        });
+
+        
+
+        return res.json({
+            success: true,
+            data: updated,
+            message: "Asset updated successfully",
+        });
+    } catch (error) {
+        console.error("[Update Asset] Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to update asset",
+        });
+    }
+}
+
+        
+
+
+        
 
 

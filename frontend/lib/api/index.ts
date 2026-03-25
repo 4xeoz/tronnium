@@ -9,3 +9,8 @@ export * from "./auth";
 export * from "./environments";
 export * from "./health";
 export * from "./assets";
+export * from "./scans";
+
+// Re-export context hooks
+export { useScan } from "../ScanContext";
+export { useUser } from "../UserContext";
