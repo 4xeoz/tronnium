@@ -1,4 +1,5 @@
 import { ThemeProvider } from "@/lib/ThemeContext";
+import { ScanProvider } from "@/lib/ScanContext";
 import AppLayout from "@/components/layout/AppLayout";
 
 interface Props {
@@ -7,10 +8,12 @@ interface Props {
 
 export default function EnvironmentsLayout({ children }: Props) {
   return (
-    <ThemeProvider>
-      <AppLayout>
-        {children}
-      </AppLayout>
-    </ThemeProvider>
+    <ScanProvider>
+      <ThemeProvider>
+        <AppLayout>
+          {children}
+        </AppLayout>
+      </ThemeProvider>
+    </ScanProvider>
   );
 }

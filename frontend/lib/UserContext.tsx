@@ -1,13 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { getCurrentUser, type User } from './api';
+import { getCurrentUser, apiFetch, type User } from './api';
 
 interface UserContextType {
   user: User | null;
   loading: boolean;
   refetchUser: () => Promise<void>;
   logout: () => Promise<void>;
+  toggleDevMode: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -25,15 +26,25 @@ export function UserProvider({
   const refetchUser = async () => {
     setLoading(true);
     try {
-      const userData = await getCurrentUser();
-      // console.log('Fetched user data:', userData);
-      
-      setUser(userData);
+      const response = await getCurrentUser();
+      setUser(response.data);
     } catch (error) {
       console.error('Failed to fetch user:', error);
       setUser(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleDevMode = async () => {
+    try {
+      const response = await apiFetch<User>("/auth/dev-mode", {
+        method: "POST",
+      });
+      setUser(response.data);
+    } catch (error) {
+      console.error('Failed to toggle dev mode:', error);
+      throw error;
     }
   };
 
@@ -60,7 +71,7 @@ export function UserProvider({
   }, [initialUser]);
 
   return (
-    <UserContext.Provider value={{ user, loading, refetchUser, logout }}>
+    <UserContext.Provider value={{ user, loading, refetchUser, logout, toggleDevMode }}>
       {children}
     </UserContext.Provider>
   );

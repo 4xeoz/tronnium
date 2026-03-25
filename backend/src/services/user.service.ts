@@ -9,6 +9,7 @@ export type PublicUser = {
   name: string | null;
   role: string;
   avatarUrl?: string | null;
+  devMode: boolean;
 };
 
 
@@ -95,7 +96,23 @@ class UserService {
       name: user.displayName,
       role: user.role,
       avatarUrl: user.avatarUrl || undefined,
+      devMode: user.devMode,
     };
+  }
+
+  /**
+   * Toggle dev mode for a user
+   */
+  async toggleDevMode(id: string): Promise<UserAccount> {
+    const user = await this.findById(id);
+    if (!user) {
+      throw new Error("User not found");
+    }
+    
+    return prisma.userAccount.update({
+      where: { id },
+      data: { devMode: !user.devMode },
+    });
   }
 
   async updateProfile(id: string, name: string, avatarUrl?: string): Promise<UserAccount> {

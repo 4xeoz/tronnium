@@ -6,24 +6,17 @@ import { apiFetch, ApiResponse, getBackendUrl } from "./client";
 
 // Types
 export type User = {
+  id?: string;
   email?: string;
   name: string;
   role: string;
   avatarUrl?: string | null;
+  devMode: boolean;
 };
 
 // API Functions
-export async function getCurrentUser(): Promise<User | null> {
-  try {
-    const response = await apiFetch<User>("/auth/me");
-    if (!response.success) {
-      throw new Error(response.message || "Failed to fetch user");
-    }
-    return response.data;
-  } catch {
-    throw new Error("Not authenticated");
-    
-  }
+export async function getCurrentUser(): Promise<ApiResponse<User>> {
+  return apiFetch<User>("/auth/me");
 }
 
 export function getGoogleLoginUrl(): string {
