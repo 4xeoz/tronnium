@@ -34,7 +34,7 @@ interface NvdCveResponse {
 
 
 
-// Ratelimiting and cash configurations
+// Rate limiting and cache configuration
 const NVD_API_KEY = process.env.NVD_API_KEY || "";
 const RATE_LIMIT_MS = NVD_API_KEY ? 600 : 6000; 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -119,14 +119,6 @@ function extractCvssData(metrics: NvdCveResponse["vulnerabilities"][0]["cve"]["m
     return { score: null, vector: null, severity: "UNKNOWN" };
 }
 
-
-function mapCvssV3ToSeverity(score: number): VulnSeverity {
-  if (score >= 9.0) return "CRITICAL";
-  if (score >= 7.0) return "HIGH";
-  if (score >= 4.0) return "MEDIUM";
-  if (score > 0) return "LOW";
-  return "NONE";
-}
 
 /**
  * Fetch CVE data from NVD for a given CPE name

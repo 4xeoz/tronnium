@@ -238,11 +238,12 @@ export async function getScanSettingsHandler(req: Request, res: Response): Promi
       return;
     }
 
-    // Get the most recent completed scan
+    // Get the most recent completed real scan (exclude mock scans)
     const lastScan = await prisma.securityScan.findFirst({
       where: {
         environmentId,
         status: ScanStatus.COMPLETED,
+        isMock: false,
       },
       orderBy: { completedAt: "desc" },
     });
