@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, ReactNode } from "react";
 import { FiPlus, FiBox, FiTrash2, FiShield, FiAlertTriangle, FiActivity, FiServer } from "react-icons/fi";
 import { getEnvironments, deleteEnvironment, type Environment } from "@/lib/api";
-import CreateEnvironmentSlideOver from "@/components/dashboard/CreateEnvironmentSlideOver";
+import CreateEnvironmentSlideOver from "@/components/environments/CreateEnvironmentSlideOver";
 
 // ============== Reusable Components ==============
 

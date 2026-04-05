@@ -5,6 +5,9 @@ import { assetRouter } from "./asset.routes";
 import environmentRouter from "./environment.routes";
 import { relationshipRouter } from "./relationship.routes";
 import scanRouter from "./scan.routes";
+import aiRouter from "./ai.routes";
+import devRouter from "./dev.routes";
+import vulnerabilityWorkflowRouter from "./vulnerabilityWorkflow.routes";
 
 export const apiRouter = Router();
 
@@ -18,3 +21,6 @@ apiRouter.use("/assets", assetRouter);
 apiRouter.use("/environments", environmentRouter);
 apiRouter.use("/relationships", relationshipRouter);
 apiRouter.use("/scans", scanRouter);
+apiRouter.use("/ai", aiRouter);
+apiRouter.use("/dev", devRouter);
+apiRouter.use("/vulnerability-workflow", vulnerabilityWorkflowRouter);

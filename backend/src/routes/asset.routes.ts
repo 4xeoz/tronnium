@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { cpeFindHandler, cpeValidateHandler, createAssetHandler, deleteAssetHandler, getAssetsHandler, updateAssetHandler } from "../controllers/asset.controller";
+import { cpeFindHandler, cpeValidateHandler, createAssetHandler, deleteAssetHandler, getAssetsHandler, updateAssetHandler, getAssetVulnerabilitiesHandler } from "../controllers/asset.controller";
 import { logRequest } from "../middleware/logger";
 import { jwtAuthGuard } from "../auth/passport";
 
@@ -47,3 +47,6 @@ assetRouter.patch("/:environmentId/:assetId", updateAssetHandler);
 
 // POST /assets/:environmentId/:assetId/delete - Delete an asset from an environment
 assetRouter.post("/:environmentId/:assetId/delete", deleteAssetHandler);
+
+// GET /assets/:environmentId/:assetId/vulnerabilities - Get vulnerabilities for an asset from latest scan
+assetRouter.get("/:environmentId/:assetId/vulnerabilities", getAssetVulnerabilitiesHandler);

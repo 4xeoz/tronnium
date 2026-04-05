@@ -4,6 +4,7 @@ import { rankCpeCandidates } from "../services/cpeRankingEngine";
 import type { CpeCandidate } from "../types/cpe.types";
 import prisma from "../lib/prisma";
 import type { PublicUser } from "../types/express";
+import { ScanStatus } from "@prisma/client";
 
 // ============================================================================
 // CPE ENDPOINTS
@@ -553,9 +554,151 @@ export async function updateAssetHandler(req: Request, res: Response) {
     }
 }
 
+/**
+ * Get vulnerabilities for a specific asset from the latest completed scan
+ * GET /assets/:environmentId/:assetId/vulnerabilities
+ */
+export async function getAssetVulnerabilitiesHandler(req: Request, res: Response) {
+    try {
+        const { environmentId, assetId } = req.params;
+        const user = req.user as PublicUser;
+
+        // Validate input
+        if (!assetId || typeof assetId !== "string") {
+            return res.status(400).json({
+                success: false,
+                error: "INVALID_INPUT",
+                message: "assetId is required and must be a string",
+            });
+        }
+
+        // Verify environment belongs to user
+        const environment = await prisma.environment.findFirst({
+            where: {
+                id: environmentId,
+                ownerId: user.id,
+            },
+        });
+
+        if (!environment) {
+            return res.status(404).json({
+                success: false,
+                error: "NOT_FOUND",
+                message: "Environment not found",
+            });
+        }
+
+        // Verify asset belongs to environment
+        const asset = await prisma.asset.findFirst({
+            where: {
+                id: assetId,
+                environmentId: environmentId,
+            },
+        });
+
+        if (!asset) {
+            return res.status(404).json({
+                success: false,
+                error: "NOT_FOUND",
+                message: "Asset not found in this environment",
+            });
+        }
+
+        // Get the latest completed scan for this environment
+        const latestScan = await prisma.securityScan.findFirst({
+            where: {
+                environmentId,
+                status: ScanStatus.COMPLETED,
+            },
+            orderBy: { completedAt: "desc" },
+            include: {
+                assetScans: {
+                    where: { assetId },
+                    include: {
+                        vulnerabilities: {
+                            include: {
+                                vulnerability: {
+                                    select: {
+                                        id: true,
+                                        cveId: true,
+                                        description: true,
+                                        cvssScore: true,
+                                        cvssVector: true,
+                                        severity: true,
+                                        publishedDate: true,
+                                        lastModifiedDate: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (!latestScan) {
+            return res.status(404).json({
+                success: false,
+                error: "NO_SCAN_DATA",
+                message: "No completed scan found for this environment. Run a scan first.",
+            });
+        }
+
+        // Extract vulnerabilities from the asset scan
+        const assetScan = latestScan.assetScans[0];
         
+        if (!assetScan) {
+            return res.json({
+                success: true,
+                data: {
+                    assetId,
+                    assetName: asset.name,
+                    scanId: latestScan.id,
+                    scannedAt: latestScan.completedAt,
+                    vulnerabilityCount: 0,
+                    vulnerabilities: [],
+                },
+                message: "Asset was not scanned in the latest scan run",
+            });
+        }
 
+        // Format vulnerabilities
+        const vulnerabilities = assetScan.vulnerabilities.map((av) => ({
+            id: av.vulnerability.id,
+            cveId: av.vulnerability.cveId,
+            description: av.vulnerability.description,
+            cvssScore: av.vulnerability.cvssScore,
+            cvssVector: av.vulnerability.cvssVector,
+            severity: av.vulnerability.severity,
+            publishedDate: av.vulnerability.publishedDate,
+            lastModifiedDate: av.vulnerability.lastModifiedDate,
+            cpeName: av.cpeName,
+        }));
 
-        
+        // Sort by severity (CRITICAL > HIGH > MEDIUM > LOW > UNKNOWN)
+        const severityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
+        vulnerabilities.sort((a, b) => {
+            return severityOrder[a.severity as keyof typeof severityOrder] - severityOrder[b.severity as keyof typeof severityOrder];
+        });
 
-
+        return res.json({
+            success: true,
+            data: {
+                assetId,
+                assetName: asset.name,
+                scanId: latestScan.id,
+                scannedAt: assetScan.scannedAt,
+                vulnerabilityCount: vulnerabilities.length,
+                vulnerabilities,
+            },
+            message: `Found ${vulnerabilities.length} vulnerabilities for this asset`,
+        });
+    } catch (error) {
+        console.error("[Get Asset Vulnerabilities] Error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "SERVER_ERROR",
+            message: "Failed to fetch asset vulnerabilities",
+        });
+    }
+}

@@ -340,7 +340,7 @@ export default function EnvironmentDashboardPage() {
   const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([]);
   
   // Scan context for live updates
-  const { isScanning, progress, scanResult: contextScanResult, environmentId: scanningEnvId, startScan: contextStartScan } = useScan();
+  const { isScanning, progress, scanResult: contextScanResult, environmentId: scanningEnvId, configureAndStartScan: contextStartScan } = useScan();
   const isScanningThisEnv = isScanning && scanningEnvId === envId;
   
   // User context for dev mode
@@ -489,7 +489,7 @@ export default function EnvironmentDashboardPage() {
         {/* Left Column - Asset Stats */}
         <div className="lg:col-span-2 flex flex-col gap-6 min-h-0">
           {/* Quick Stats Row - Fixed height */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-shrink-0">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 ">
             <StatCard
               icon={<FiServer className="w-5 h-5 text-brand-1" />}
               label="Total Assets"

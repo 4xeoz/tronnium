@@ -1,6 +1,7 @@
 import prisma from "../lib/prisma";
-import { fetchCvesFroCpe } from "./nvdCve";
+import { fetchCvesFroCpe, getMaxLookbackDate, isValidLookbackDate } from "./nvdCve";
 import { ScanStatus, VulnSeverity } from "@prisma/client";
+import { getOrCreateWorkflow, shouldHideVulnerability } from "./vulnerabilityWorkflow.service";
 
 interface ScanProgress {
   stage: "scanning" | "processing" | "completed";
@@ -20,16 +21,59 @@ interface ScanResult {
   riskScore: number | null;
 }
 
+export interface ScanOptions {
+  /** 
+   * Scan from this date onwards. 
+   * If not provided, scans all CVEs.
+   * If "last-scan", uses the date of the previous completed scan.
+   * Max lookback: 5 years
+   */
+  fromDate?: Date | "last-scan";
+}
+
 /**
  * Run a vulnerability scan for an environment
  * @param environmentId - The environment to scan
+ * @param options - Optional scan configuration
  * @param onProgress - Optional callback for progress updates (useful for SSE)
  * @returns The completed scan result
  */
 export async function runScan(
   environmentId: string,
+  options: ScanOptions = {},
   onProgress?: (progress: ScanProgress) => void
 ): Promise<ScanResult> {
+  // Resolve fromDate if set to "last-scan"
+  let pubStartDate: Date | undefined;
+  
+  if (options.fromDate === "last-scan") {
+    // Find the most recent completed REAL scan (not mock scans from dev mode)
+    const lastScan = await prisma.securityScan.findFirst({
+      where: {
+        environmentId,
+        status: ScanStatus.COMPLETED,
+        isMock: false, // ⚠️ CRITICAL: Only consider real scans, not mock scans
+      },
+      orderBy: { completedAt: "desc" },
+    });
+    
+    if (lastScan?.completedAt) {
+      pubStartDate = lastScan.completedAt;
+      console.log(`[Scan] Using last real scan date: ${pubStartDate.toISOString()}`);
+    } else {
+      console.log(`[Scan] No previous real scan found, will scan all CVEs`);
+    }
+  } else if (options.fromDate instanceof Date) {
+    // Validate the date is within allowed range
+    if (!isValidLookbackDate(options.fromDate)) {
+      const maxLookback = getMaxLookbackDate();
+      throw new Error(
+        `Invalid fromDate. Must be between ${maxLookback.toISOString()} and now.`
+      );
+    }
+    pubStartDate = options.fromDate;
+  }
+
   // Step 1: Create SecurityScan record
   const scan = await prisma.securityScan.create({
     data: {
@@ -87,14 +131,15 @@ export async function runScan(
 
       // Parse CPEs from JSON
       const cpes = Array.isArray(asset.cpes) ? asset.cpes : [];
-      const assetVulnerabilities = new Map<string, string>(); // cveId -> cpeName
+      const assetVulnerabilities = new Map<string, string>(); // vulnerabilityId -> cpeName
 
       // Step 4b-d: Fetch CVEs for each CPE and upsert Vulnerability records
       for (const cpeItem of cpes) {
         const cpeName = typeof cpeItem === "string" ? cpeItem : cpeItem.cpeName;
 
         try {
-          const cves = await fetchCvesFroCpe(cpeName);
+          // Pass pubStartDate to only get CVEs from the specified date onwards
+          const cves = await fetchCvesFroCpe(cpeName, pubStartDate);
 
           for (const cve of cves) {
             // Upsert Vulnerability (deduplicated by cveId)
@@ -135,9 +180,79 @@ export async function runScan(
         }
       }
 
-      // Step 4e: Create AssetVulnerability links (deduplicated per asset)
-      // Now using the correct UUID vulnerabilityId
+      // Step 4b-e: Include mock vulnerabilities from dev mode
+      // Find mock vulnerabilities that were explicitly generated for this asset
+      // Only include mocks that match this asset's CPEs to avoid cross-contamination
+      const mockVulnerabilities = await prisma.assetVulnerability.findMany({
+        where: {
+          assetScan: {
+            assetId: asset.id,
+            scan: {
+              isMock: true, // Only from mock scans created in dev mode
+            },
+          },
+          vulnerability: {
+            isMock: true, // Only mock vulnerabilities
+          },
+          // Only include if the CPE matches one of this asset's CPEs
+          // This prevents mock CVEs from being applied to wrong assets
+          cpeName: {
+            in: cpes.map(cpe => typeof cpe === "string" ? cpe : cpe.cpeName),
+          },
+        },
+        include: {
+          vulnerability: true,
+        },
+        distinct: ["vulnerabilityId"], // Deduplicate
+      });
+
+      if (mockVulnerabilities.length > 0) {
+        console.log(`[Scan] Found ${mockVulnerabilities.length} mock vulnerabilities for asset ${asset.name} matching CPEs`);
+      }
+
+      for (const mockAv of mockVulnerabilities) {
+        const vuln = mockAv.vulnerability;
+        
+        // Only add if not already found from NVD (avoid duplicates)
+        if (!assetVulnerabilities.has(vuln.id)) {
+          assetVulnerabilities.set(vuln.id, mockAv.cpeName);
+          
+          // Count by severity
+          if (vuln.severity in severityCounts) {
+            severityCounts[vuln.severity as keyof typeof severityCounts]++;
+          }
+          
+          console.log(`[Scan] Including mock CVE ${vuln.cveId} for ${asset.name}`);
+        }
+      }
+
+      // Step 4b-f: Create/update workflow records and filter out resolved vulnerabilities
+      // This ensures CVEs persist and can be managed through the workflow
+      const visibleVulnerabilities = new Map<string, string>(); // vulnerabilityId -> cpeName
+      
       for (const [vulnerabilityId, cpeName] of assetVulnerabilities) {
+        // Get or create workflow record (updates lastSeenAt)
+        await getOrCreateWorkflow(environmentId, asset.id, vulnerabilityId, cpeName);
+        
+        // Check if this vulnerability should be hidden (RESOLVED or FALSE_POSITIVE)
+        const shouldHide = await shouldHideVulnerability(environmentId, asset.id, vulnerabilityId, cpeName);
+        
+        if (shouldHide) {
+          console.log(`[Scan] Hiding resolved/false-positive vulnerability ${vulnerabilityId} for ${asset.name}`);
+          // Remove from severity counts since we're not showing it
+          const vuln = await prisma.vulnerability.findUnique({ where: { id: vulnerabilityId } });
+          if (vuln && vuln.severity in severityCounts) {
+            severityCounts[vuln.severity as keyof typeof severityCounts]--;
+          }
+        } else {
+          // Include in visible vulnerabilities
+          visibleVulnerabilities.set(vulnerabilityId, cpeName);
+        }
+      }
+
+      // Step 4e: Create AssetVulnerability links (deduplicated per asset)
+      // Only for visible (non-resolved) vulnerabilities
+      for (const [vulnerabilityId, cpeName] of visibleVulnerabilities) {
         await prisma.assetVulnerability.upsert({
           where: {
             assetScanId_vulnerabilityId: {
@@ -155,14 +270,25 @@ export async function runScan(
           },
         });
       }
+      
+      // Replace assetVulnerabilities with filtered list for counting
+      assetVulnerabilities.clear();
+      for (const [id, cpe] of visibleVulnerabilities) {
+        assetVulnerabilities.set(id, cpe);
+      }
 
       scannedAssets++;
       vulnerabilitiesFound += assetVulnerabilities.size;
 
-      // Step 4f: Notify progress with CVE count
+      // Step 4f: Notify progress with CVE count (including mocks)
+      const mockCount = mockVulnerabilities.length;
+      const message = mockCount > 0 
+        ? `Found ${assetVulnerabilities.size} CVEs for ${asset.name} (${mockCount} mock)`
+        : `Found ${assetVulnerabilities.size} CVEs for ${asset.name}`;
+      
       onProgress?.({
         stage: "scanning",
-        message: `Found ${assetVulnerabilities.size} CVEs for ${asset.name}`,
+        message,
       });
     }
 
@@ -224,6 +350,7 @@ export async function getLatestScan(environmentId: string) {
     where: {
       environmentId,
       status: ScanStatus.COMPLETED,
+      isMock: false, // Only return real scans, not mock scans from dev mode
     },
     orderBy: { completedAt: "desc" },
     include: {
@@ -241,11 +368,13 @@ export async function getLatestScan(environmentId: string) {
             include: {
               vulnerability: {
                 select: {
+                  id: true,
                   cveId: true,
                   description: true,
                   cvssScore: true,
                   severity: true,
                   publishedDate: true,
+                  isMock: true,
                 },
               },
             },
@@ -262,7 +391,10 @@ export async function getLatestScan(environmentId: string) {
  */
 export async function getScanHistory(environmentId: string, limit: number = 10) {
   return await prisma.securityScan.findMany({
-    where: { environmentId },
+    where: { 
+      environmentId,
+      isMock: false, // Only return real scans
+    },
     orderBy: { createdAt: "desc" },
     take: limit,
     select: {
@@ -278,6 +410,50 @@ export async function getScanHistory(environmentId: string, limit: number = 10) 
       mediumCount: true,
       lowCount: true,
       riskScore: true,
+    },
+  });
+}
+
+/**
+ * Get a single scan by ID with full details
+ * Includes all asset scans and vulnerabilities
+ */
+export async function getScanById(scanId: string, environmentId: string) {
+  return await prisma.securityScan.findFirst({
+    where: {
+      id: scanId,
+      environmentId,
+    },
+    include: {
+      assetScans: {
+        include: {
+          asset: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              domain: true,
+            },
+          },
+          vulnerabilities: {
+            include: {
+              vulnerability: {
+                select: {
+                  id: true,
+                  cveId: true,
+                  description: true,
+                  cvssScore: true,
+                  cvssVector: true,
+                  severity: true,
+                  publishedDate: true,
+                  lastModifiedDate: true,
+                  isMock: true,
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
 }

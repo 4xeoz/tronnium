@@ -10,6 +10,8 @@ export * from "./environments";
 export * from "./health";
 export * from "./assets";
 export * from "./scans";
+export * from "./dev";
+export * from "./ai";
 
 // Re-export context hooks
 export { useScan } from "../ScanContext";

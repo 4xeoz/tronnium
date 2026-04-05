@@ -1,200 +1,570 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { FiCode, FiAlertTriangle, FiZap, FiTerminal, FiCpu, FiSend, FiRefreshCw, FiShield } from "react-icons/fi";
+import {
+  generateMockVulnerabilities,
+  clearMockVulnerabilities,
+  getMockVulnerabilities,
+  getMockVulnerabilityStats,
+  type GeneratedVulnerability,
+  type MockVulnerability,
+  type MockVulnerabilityStats,
+  getMockSeverityColor,
+  formatCveId,
+} from "@/lib/api";
+import { getAssets, type Asset } from "@/lib/api/assets";
 
-// Dummy AI Vulnerability Generator Component
+const STEPS = {
+  START: 'start',
+  SELECT: 'select',
+  PROMPT: 'prompt', 
+  GENERATING: 'generating',
+  RESULTS: 'results'
+} as const;
+
+type Step = typeof STEPS[keyof typeof STEPS];
+
+type SelectedAsset = {
+  assetId: string;
+  assetName: string;
+  cpeIdentifier?: string;  // cpeName string (either from object.cpeName or the string itself)
+  cpeDisplay?: string;     // What to show in the UI
+};
+
 function AIVulnGenerator() {
+  const params = useParams();
+  const envId = params.envId as string;
+
+  const [step, setStep] = useState<Step>(STEPS.START);
   const [prompt, setPrompt] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedVulns, setGeneratedVulns] = useState<Array<{
-    cveId: string;
-    severity: string;
-    description: string;
-    asset: string;
-  }>>([]);
+  const [generatedVulns, setGeneratedVulns] = useState<GeneratedVulnerability[]>([]);
+  const [mockVulns, setMockVulns] = useState<MockVulnerability[]>([]);
+  const [stats, setStats] = useState<MockVulnerabilityStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [selectedAssets, setSelectedAssets] = useState<SelectedAsset[]>([]);
+  const [expandedAssets, setExpandedAssets] = useState<Set<string>>(new Set());
 
-  const handleGenerate = async () => {
-    setIsGenerating(true);
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+  useEffect(() => {
+    loadData();
+  }, [envId]);
+
+  const loadData = async () => {
+    try {
+      setIsLoading(true);
+      const [vulnsRes, statsRes, assetsRes] = await Promise.all([
+        getMockVulnerabilities(envId),
+        getMockVulnerabilityStats(envId),
+        getAssets(envId),
+      ]);
+
+      if (vulnsRes.data) setMockVulns(vulnsRes.data);
+      if (statsRes.data) setStats(statsRes.data);
+      if (assetsRes.data) setAssets(assetsRes.data);
+    } catch (err) {
+      console.error("Failed to load data:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleAsset = (asset: Asset, cpe?: CpeItem) => {
+    setSelectedAssets(prev => {
+      const cpeId = cpe ? (typeof cpe === 'string' ? cpe : cpe.cpeName) : undefined;
+      const exists = prev.some(s => 
+        s.assetId === asset.id && s.cpeIdentifier === cpeId
+      );
+      
+      if (exists) {
+        return prev.filter(s => 
+          !(s.assetId === asset.id && s.cpeIdentifier === cpeId)
+        );
+      } else {
+        return [...prev, {
+          assetId: asset.id,
+          assetName: asset.name,
+          cpeIdentifier: cpeId,
+          cpeDisplay: cpe ? (typeof cpe === 'string' ? cpe : cpe.cpeName) : undefined
+        }];
+      }
+    });
+  };
+
+  const isSelected = (assetId: string, cpe?: CpeItem) => {
+    const cpeId = cpe ? (typeof cpe === 'string' ? cpe : cpe.cpeName) : undefined;
+    return selectedAssets.some(s => 
+      s.assetId === assetId && s.cpeIdentifier === cpeId
+    );
+  };
+
+  const toggleExpand = (assetId: string) => {
+    setExpandedAssets(prev => {
+      const next = new Set(prev);
+      if (next.has(assetId)) next.delete(assetId);
+      else next.add(assetId);
+      return next;
+    });
+  };
+
+  type CpeItem = string | { cpeName: string; title?: string; score?: number };
+
+const getCpes = (asset: Asset): CpeItem[] => {
+    if (!asset.cpes) return [];
     
-    // Dummy generated vulnerabilities
-    const dummyVulns = [
-      {
-        cveId: "CVE-2024-DEV-001",
-        severity: "CRITICAL",
-        description: "Remote code execution vulnerability in Apache Tomcat 9.0.x - Allows attackers to execute arbitrary code via crafted JSP file upload.",
-        asset: "Web Server (Apache Tomcat)",
-      },
-      {
-        cveId: "CVE-2024-DEV-002",
-        severity: "HIGH",
-        description: "SQL injection vulnerability in MySQL connector - Potential data exfiltration through malformed query parameters.",
-        asset: "Database Server (MySQL)",
-      },
-      {
-        cveId: "CVE-2024-DEV-003",
-        severity: "MEDIUM",
-        description: "Information disclosure via verbose error messages in API responses.",
-        asset: "API Gateway",
-      },
-    ];
+    // Already an array
+    if (Array.isArray(asset.cpes)) {
+      return asset.cpes as CpeItem[];
+    }
     
-    setGeneratedVulns((prev) => [...dummyVulns, ...prev]);
-    setIsGenerating(false);
+    // Try to parse JSON string
+    try {
+      const parsed = JSON.parse(asset.cpes);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+const getCpeDisplayName = (cpe: CpeItem): string => {
+    if (typeof cpe === 'string') return cpe;
+    return cpe.cpeName || 'Unknown CPE';
+  };
+
+  const handleContinueToPrompt = () => {
+    if (selectedAssets.length === 0) return;
+    setStep(STEPS.PROMPT);
+    handleGeneratePrompt();
+  };
+
+  const handleGeneratePrompt = () => {
+    setIsGeneratingPrompt(true);
+    
+    setTimeout(() => {
+      const generatedPrompt = buildContextualPrompt();
+      setPrompt(generatedPrompt);
+      setIsGeneratingPrompt(false);
+    }, 300);
+  };
+
+  const buildContextualPrompt = (): string => {
+    const uniqueAssets = [...new Set(selectedAssets.map(s => s.assetName))];
+    const cpes = selectedAssets.map(s => s.cpeDisplay).filter(Boolean) as string[];
+    
+    const assetList = uniqueAssets.join(", ");
+    const cpeList = cpes.length > 0 ? cpes.slice(0, 2).join(", ") : "the selected systems";
+    
+    return `Generate 3 realistic vulnerabilities for:
+
+Assets: ${assetList}
+${cpes.length > 0 ? `CPEs: ${cpeList}${cpes.length > 2 ? ` +${cpes.length - 2} more` : ""}` : ""}
+
+Create:
+- 1 Critical: Remote Code Execution
+- 1 High: SQL Injection or Auth Bypass  
+- 1 Medium: Information Disclosure
+
+Make them technically detailed and realistic for these specific systems.`;
+  };
+
+  const handleSendToLLM = async () => {
+    if (!prompt.trim()) return;
+
+    setIsSending(true);
+    setStep(STEPS.GENERATING);
+    setError(null);
+
+    try {
+      // Convert selected assets to targets format for API
+      const targets = selectedAssets.map(s => ({
+        assetId: s.assetId,
+        assetName: s.assetName,
+        cpeIdentifier: s.cpeIdentifier,
+      }));
+
+      const response = await generateMockVulnerabilities(envId, prompt, 3, targets);
+      
+      if (response.data) {
+        setGeneratedVulns(response.data.vulnerabilities);
+        await loadData();
+        setStep(STEPS.RESULTS);
+        setPrompt("");
+        setSelectedAssets([]);
+      } else {
+        setError(response.message || "Failed");
+        setStep(STEPS.PROMPT);
+      }
+    } catch (err: any) {
+      const msg = err.message || "Error";
+      if (msg.includes("GEMINI_API_KEY")) {
+        setError("AI service not configured. Please set GEMINI_API_KEY in environment.");
+      } else if (msg.includes("No assets found")) {
+        setError("No assets in environment. Add assets first.");
+      } else if (msg.includes("Dev mode")) {
+        setError("Dev mode required. Contact admin to enable.");
+      } else {
+        setError(msg);
+      }
+      setStep(STEPS.PROMPT);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleClear = async () => {
+    if (!confirm("Clear all?")) return;
+    setClearing(true);
+    try {
+      await clearMockVulnerabilities(envId);
+      setMockVulns([]);
+      setGeneratedVulns([]);
+      setStats(null);
+      setStep(STEPS.START);
+      setSelectedAssets([]);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  const handleStartOver = () => {
+    setStep(STEPS.START);
     setPrompt("");
+    setError(null);
+    setSelectedAssets([]);
   };
 
-  const severityColors: Record<string, string> = {
-    CRITICAL: "bg-red-500 text-white",
-    HIGH: "bg-orange-500 text-white",
-    MEDIUM: "bg-yellow-500 text-black",
-    LOW: "bg-blue-500 text-white",
-  };
+  const totalCount = stats?.total || 0;
 
-  return (
-    <div className="bg-surface rounded-xl border border-border overflow-hidden">
-      <div className="p-4 border-b border-border bg-purple-500/5">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-            <FiZap className="w-5 h-5 text-purple-500" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-text-primary">AI Vulnerability Generator</h3>
-            <p className="text-xs text-text-muted">Generate fake CVEs for testing using AI prompts</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-4 space-y-4">
-        {/* Prompt Input */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-text-secondary">
-            Describe what vulnerabilities to generate
-          </label>
-          <div className="relative">
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="e.g., 'Generate 3 critical vulnerabilities for Apache servers with remote code execution' or 'Create vulnerabilities for a financial system with SQL injection issues'..."
-              className="w-full h-24 p-3 bg-surface-secondary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
-            />
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating || !prompt.trim()}
-              className="absolute bottom-3 right-3 px-3 py-1.5 bg-purple-500 text-white rounded-md text-xs font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-            >
-              {isGenerating ? (
-                <>
-                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <FiSend className="w-3 h-3" />
-                  Generate
-                </>
-              )}
-            </button>
-          </div>
+  // STEP 1: START
+  if (step === STEPS.START) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900">Mock Vulnerability Generator</h2>
+          <p className="text-sm text-gray-500">Select assets to target</p>
         </div>
 
-        {/* Quick Prompts */}
-        <div className="flex flex-wrap gap-2">
-          <span className="text-xs text-text-muted">Quick prompts:</span>
-          {[
-            "Critical RCE vulnerabilities",
-            "Database injection issues",
-            "Network misconfigurations",
-            "API security flaws",
-          ].map((quickPrompt) => (
-            <button
-              key={quickPrompt}
-              onClick={() => setPrompt(`Generate ${quickPrompt} for testing purposes`)}
-              className="px-2 py-1 bg-surface-secondary hover:bg-purple-500/10 border border-border hover:border-purple-500/30 rounded text-[10px] text-text-muted hover:text-purple-500 transition-colors"
-            >
-              {quickPrompt}
-            </button>
-          ))}
-        </div>
-
-        {/* Generated Vulnerabilities */}
-        {generatedVulns.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-text-secondary">Generated Vulnerabilities</h4>
-              <button
-                onClick={() => setGeneratedVulns([])}
-                className="text-xs text-text-muted hover:text-error-text flex items-center gap-1"
-              >
-                <FiRefreshCw className="w-3 h-3" />
-                Clear
-              </button>
-            </div>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {generatedVulns.map((vuln, idx) => (
-                <div
-                  key={`${vuln.cveId}-${idx}`}
-                  className="p-3 bg-surface-secondary rounded-lg border border-border hover:border-purple-500/30 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-mono text-xs text-text-primary">{vuln.cveId}</span>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${severityColors[vuln.severity]}`}>
-                          {vuln.severity}
-                        </span>
-                      </div>
-                      <p className="text-xs text-text-secondary line-clamp-2">{vuln.description}</p>
-                      <p className="text-[10px] text-text-muted mt-1">Target: {vuln.asset}</p>
-                    </div>
-                  </div>
+        <div className="p-5">
+          {totalCount > 0 && (
+            <div className="flex gap-4 mb-5 pb-4 border-b border-gray-100">
+              <div className="text-center">
+                <div className="text-xl font-bold text-red-600">
+                  {stats?.bySeverity.find(s => s.severity === "CRITICAL")?._count.id || 0}
                 </div>
-              ))}
+                <div className="text-xs text-gray-500 uppercase">Critical</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-orange-600">
+                  {stats?.bySeverity.find(s => s.severity === "HIGH")?._count.id || 0}
+                </div>
+                <div className="text-xs text-gray-500 uppercase">High</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-yellow-600">
+                  {stats?.bySeverity.find(s => s.severity === "MEDIUM")?._count.id || 0}
+                </div>
+                <div className="text-xs text-gray-500 uppercase">Medium</div>
+              </div>
+              <div className="ml-auto">
+                <button
+                  onClick={handleClear}
+                  disabled={clearing}
+                  className="text-sm text-red-600 hover:bg-red-50 px-3 py-1.5 rounded"
+                >
+                  {clearing ? "..." : "Clear"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="text-center py-8 text-gray-500">Loading assets...</div>
+          ) : assets.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">No assets found</div>
+          ) : (
+            <>
+              <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
+                {assets.map((asset) => {
+                  const cpes = getCpes(asset);
+                  const isExpanded = expandedAssets.has(asset.id);
+                  const hasCpes = cpes.length > 0;
+                  const assetSelected = isSelected(asset.id);
+                  
+                  return (
+                    <div key={asset.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                      {/* Asset Row */}
+                      <div 
+                        className={`flex items-center justify-between p-3 cursor-pointer transition-colors ${
+                          assetSelected ? 'bg-gray-50' : 'hover:bg-gray-50'
+                        }`}
+                        onClick={() => !hasCpes && toggleAsset(asset)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={assetSelected}
+                            onChange={() => toggleAsset(asset)}
+                            className="w-4 h-4 rounded border-gray-300"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div>
+                            <div className="font-medium text-sm text-gray-900">{asset.name}</div>
+                            <div className="text-xs text-gray-500">{asset.type}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {hasCpes && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleExpand(asset.id);
+                              }}
+                              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
+                            >
+                              {cpes.length} CPEs {isExpanded ? '▲' : '▼'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* CPE List */}
+                      {isExpanded && hasCpes && (
+                        <div className="border-t border-gray-100 bg-gray-50">
+                          {cpes.map((cpe, idx) => (
+                            <label
+                              key={idx}
+                              className="flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected(asset.id, cpe)}
+                                onChange={() => toggleAsset(asset, cpe)}
+                                className="w-4 h-4 rounded border-gray-300"
+                              />
+                              <span className="text-xs font-mono text-gray-600 truncate">
+                                {getCpeDisplayName(cpe)}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setStep(STEPS.SELECT)}
+                disabled={selectedAssets.length === 0}
+                className="w-full py-3 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-300 text-white rounded-lg font-medium transition-colors"
+              >
+                Continue ({selectedAssets.length} selected)
+              </button>
+            </>
+          )}
+
+          {mockVulns.length > 0 && (
+            <div className="mt-5 pt-4 border-t border-gray-100">
+              <div className="text-sm font-medium text-gray-700 mb-2">
+                Previous ({mockVulns.length})
+              </div>
+              <div className="space-y-2">
+                {mockVulns.slice(0, 3).map((vuln) => (
+                  <div key={vuln.id} className="flex items-center gap-2 text-sm">
+                    <span className="font-mono">{formatCveId(vuln.cveId)}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-xs ${getMockSeverityColor(vuln.severity)}`}>
+                      {vuln.severity}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // STEP 2: SELECTION SUMMARY + GENERATE PROMPT
+  if (step === STEPS.SELECT) {
+    const uniqueAssetIds = [...new Set(selectedAssets.map(s => s.assetId))];
+    
+    return (
+      <div className="bg-white rounded-lg border border-gray-200">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Selection</h2>
+          <button
+            onClick={() => setStep(STEPS.START)}
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            Back
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div>
+            <div className="text-sm font-medium text-gray-700 mb-2">
+              {selectedAssets.length} items selected
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+              {uniqueAssetIds.map(assetId => {
+                const assetSelections = selectedAssets.filter(s => s.assetId === assetId);
+                const name = assetSelections[0]?.assetName || 'Unknown';
+                const cpes = assetSelections.filter(s => s.cpeIdentifier).map(s => s.cpeDisplay);
+                
+                return (
+                  <div key={assetId} className="text-sm">
+                    <span className="font-medium">{name}</span>
+                    {cpes.length > 0 && (
+                      <span className="text-gray-500 text-xs ml-2">
+                        ({cpes.length} CPEs)
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
-        )}
 
-        {/* Info Box */}
-        <div className="bg-info-bg/50 border border-info-border rounded-lg p-3 flex gap-3">
-          <FiTerminal className="w-4 h-4 text-info-text flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-xs text-info-text font-medium">Demo Mode Active</p>
-            <p className="text-[10px] text-info-text/80 mt-0.5">
-              These vulnerabilities are not real and are only stored in memory for this session. 
-              No actual CVE data is created or saved to the database.
-            </p>
+          <button
+            onClick={handleContinueToPrompt}
+            disabled={isGeneratingPrompt}
+            className="w-full py-4 bg-gray-900 hover:bg-gray-800 text-white rounded-lg font-medium transition-colors"
+          >
+            {isGeneratingPrompt ? "Generating..." : "Generate Prompt"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // STEP 3: PROMPT
+  if (step === STEPS.PROMPT) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Review</h2>
+          <button
+            onClick={handleStartOver}
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            Cancel
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {error && (
+            <div className="bg-red-50 text-red-700 px-4 py-3 rounded text-sm">
+              {error}
+            </div>
+          )}
+
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            className="w-full h-48 p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:border-gray-400 resize-none"
+          />
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleGeneratePrompt}
+              disabled={isGeneratingPrompt}
+              className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              {isGeneratingPrompt ? "..." : "Regenerate"}
+            </button>
+            <button
+              onClick={handleSendToLLM}
+              disabled={isSending || !prompt.trim()}
+              className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+            >
+              {isSending ? "Sending..." : "Send to AI"}
+            </button>
           </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  // STEP 4: GENERATING
+  if (step === STEPS.GENERATING) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+        <div className="w-10 h-10 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto mb-4" />
+        <h2 className="text-lg font-semibold text-gray-900">Generating</h2>
+        <p className="text-sm text-gray-500 mt-1">Creating vulnerabilities...</p>
+      </div>
+    );
+  }
+
+  // STEP 5: RESULTS
+  if (step === STEPS.RESULTS) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900">Done</h2>
+          <p className="text-sm text-gray-500">{generatedVulns.length} created</p>
+        </div>
+
+        <div className="p-5 space-y-3">
+          {generatedVulns.map((vuln, idx) => (
+            <div key={idx} className="p-4 bg-green-50 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-mono text-sm font-medium">{formatCveId(vuln.cveId)}</span>
+                <span className={`px-1.5 py-0.5 rounded text-xs ${getMockSeverityColor(vuln.severity)}`}>
+                  {vuln.severity}
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-700">
+                  MOCK
+                </span>
+              </div>
+              <p className="text-sm text-gray-600">{vuln.description}</p>
+            </div>
+          ))}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={handleStartOver}
+              className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Generate More
+            </button>
+            <a
+              href={`/environments/${envId}/security`}
+              className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium text-center hover:bg-gray-800"
+            >
+              View Security
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
-// Coming Soon Feature Card
 function ComingSoonCard({ 
   title, 
-  description, 
-  icon: Icon 
+  description 
 }: { 
   title: string; 
   description: string; 
-  icon: React.ElementType;
 }) {
   return (
-    <div className="bg-surface rounded-xl border border-border p-5 opacity-60">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="w-10 h-10 rounded-lg bg-surface-secondary flex items-center justify-center">
-          <Icon className="w-5 h-5 text-text-muted" />
-        </div>
-        <div>
-          <h3 className="font-medium text-text-primary">{title}</h3>
-          <span className="px-2 py-0.5 bg-purple-500/10 text-purple-500 text-[10px] rounded-full">Coming Soon</span>
-        </div>
+    <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 opacity-70">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="font-medium text-gray-900">{title}</h3>
+        <span className="px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded">Soon</span>
       </div>
-      <p className="text-xs text-text-muted">{description}</p>
+      <p className="text-xs text-gray-500">{description}</p>
     </div>
   );
 }
@@ -204,90 +574,33 @@ export default function DevModePage() {
   const envId = params.envId as string;
 
   return (
-    <div className="p-6 h-full flex flex-col max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-start gap-4 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center">
-          <FiCode className="w-6 h-6 text-purple-500" />
+    <div className="p-6 max-w-4xl mx-auto">
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-1">
+          <h1 className="text-xl font-bold text-gray-900">Dev Mode</h1>
+          <span className="px-2 py-0.5 bg-gray-900 text-white text-xs rounded font-medium">BETA</span>
         </div>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-text-primary">Developer Mode</h1>
-            <span className="px-2 py-0.5 bg-purple-500 text-white text-xs rounded-full font-medium">
-              BETA
-            </span>
-          </div>
-          <p className="text-text-secondary text-sm mt-0.5">
-            Experimental features for testing, development, and exploring application capabilities.
-          </p>
-        </div>
+        <p className="text-sm text-gray-500">Testing and development tools</p>
       </div>
 
-      {/* Warning Banner */}
-      <div className="bg-warning-bg/50 border border-warning-border rounded-xl p-4 flex gap-4 mb-6">
-        <FiAlertTriangle className="w-6 h-6 text-warning-text flex-shrink-0" />
-        <div>
-          <h3 className="text-sm font-medium text-warning-text">Development Environment</h3>
-          <p className="text-xs text-warning-text/80 mt-1">
-            Features on this page are intended for testing and experimentation only. 
-            Generated data is simulated and does not represent real security vulnerabilities. 
-            Use responsibly and never use generated data for production security decisions.
-          </p>
-        </div>
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+        <p className="text-sm text-amber-800">
+          <strong>Note:</strong> Generated data appears in dashboards with "MOCK" labels.
+        </p>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
-        {/* Left Column */}
-        <div className="flex flex-col gap-6 overflow-y-auto pr-1">
-          <AIVulnGenerator />
-          
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <AIVulnGenerator />
+        
+        <div className="space-y-3">
           <ComingSoonCard
-            title="Mock Data Generator"
-            description="Generate complete mock environments with realistic asset configurations, relationships, and scan histories for testing."
-            icon={FiCpu}
+            title="Mock Environment"
+            description="Generate complete test environments"
           />
-        </div>
-
-        {/* Right Column */}
-        <div className="flex flex-col gap-6 overflow-y-auto pr-1">
           <ComingSoonCard
-            title="Security Playground"
-            description="Test different security scenarios and see how the dashboard responds to various vulnerability combinations and severity levels."
-            icon={FiShield}
+            title="Scenario Tester"
+            description="Test security dashboard responses"
           />
-          
-          <ComingSoonCard
-            title="Performance Stress Test"
-            description="Simulate high-load scenarios with thousands of assets and vulnerabilities to test dashboard performance and rendering limits."
-            icon={FiTerminal}
-          />
-
-          {/* Debug Info */}
-          <div className="bg-surface rounded-xl border border-border p-4">
-            <h3 className="text-sm font-medium text-text-secondary mb-3 flex items-center gap-2">
-              <FiTerminal className="w-4 h-4" />
-              Debug Information
-            </h3>
-            <div className="space-y-2 text-xs font-mono">
-              <div className="flex justify-between">
-                <span className="text-text-muted">Environment ID:</span>
-                <span className="text-text-primary">{envId}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-text-muted">Dev Mode:</span>
-                <span className="text-green-500">Active</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-text-muted">API Version:</span>
-                <span className="text-text-primary">v1.0.0-beta</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-text-muted">Build:</span>
-                <span className="text-text-primary">dev-{new Date().toISOString().slice(0, 10)}</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

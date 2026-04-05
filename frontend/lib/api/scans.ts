@@ -31,6 +31,7 @@ export type ScanProgress = {
 };
 
 export type Vulnerability = {
+  id: string;
   cveId: string;
   description: string;
   cvssScore: number | null;
@@ -38,6 +39,8 @@ export type Vulnerability = {
   severity: ScanSeverity;
   publishedDate: string | null;
   lastModifiedDate: string | null;
+  isMock?: boolean;
+  mockPrompt?: string | null;
 };
 
 export type AssetVulnerability = {
@@ -91,48 +94,67 @@ export type ScanHistoryItem = {
   riskScore: number | null;
 };
 
+export type ScanSettings = {
+  lastScanDate: string | null;
+  maxLookbackDate: string;
+  defaultFromDate: string;
+  hasPreviousScan: boolean;
+};
+
+export type ScanFromDateOption = "all" | "last-scan" | "custom";
+
 /**
  * Start a vulnerability scan with SSE progress updates
  * Uses POST to /scans/:environmentId with EventSource
+ * 
+ * @param environmentId - The environment to scan
+ * @param fromDate - Optional: "last-scan" or ISO date string to scan from
+ * @param onProgress - Callback for progress messages
+ * @param onComplete - Callback when scan completes
+ * @param onError - Callback on error
  */
 export function startScan(
   environmentId: string,
-  onProgress: (message: string) => void,
-  onComplete: (result: ScanResult) => void,
-  onError: (error: string) => void
+  fromDate?: string,
+  onProgress?: (message: string) => void,
+  onComplete?: (result: ScanResult) => void,
+  onError?: (error: string) => void
 ): EventSource {
   const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
   
+  // Build URL with optional fromDate parameter
+  const url = new URL(`${baseUrl}/scans/${environmentId}/start`);
+  if (fromDate) {
+    url.searchParams.set("fromDate", fromDate);
+  }
+  
   // Use /start endpoint for SSE (EventSource only supports GET)
-  const eventSource = new EventSource(
-    `${baseUrl}/scans/${environmentId}/start`,
-    { withCredentials: true }
-  );
+  const eventSource = new EventSource(url.toString(), { withCredentials: true });
 
   eventSource.onmessage = (event) => {
     try {
       const data: ScanProgress = JSON.parse(event.data);
 
       if (data.type === "progress") {
-        onProgress(data.message);
+        onProgress?.(data.message);
       } else if (data.type === "completed") {
         if (data.data) {
-          onComplete(data.data);
+          onComplete?.(data.data);
         }
         eventSource.close();
       } else if (data.type === "error") {
-        onError(data.message || "Scan failed");
+        onError?.(data.message || "Scan failed");
         eventSource.close();
       }
     } catch (parseError) {
       console.error("Failed to parse SSE message:", parseError);
-      onError("Failed to parse scan update");
+      onError?.("Failed to parse scan update");
       eventSource.close();
     }
   };
 
   eventSource.onerror = () => {
-    onError("Connection error. Please try again.");
+    onError?.("Connection error. Please try again.");
     eventSource.close();
   };
 
@@ -156,6 +178,27 @@ export async function getScanHistory(
   limit: number = 10
 ): Promise<ApiResponse<ScanHistoryItem[]>> {
   return apiFetch<ScanHistoryItem[]>(`/scans/${environmentId}?limit=${limit}`);
+}
+
+/**
+ * Get scan settings for an environment
+ * Returns last scan date, max lookback date, and other settings
+ */
+export async function getScanSettings(
+  environmentId: string
+): Promise<ApiResponse<ScanSettings>> {
+  return apiFetch<ScanSettings>(`/scans/${environmentId}/settings`);
+}
+
+/**
+ * Get a single scan by ID with full details
+ * Includes all asset scans and vulnerabilities
+ */
+export async function getScanById(
+  environmentId: string,
+  scanId: string
+): Promise<ApiResponse<LatestScan>> {
+  return apiFetch<LatestScan>(`/scans/${environmentId}/${scanId}`);
 }
 
 /**

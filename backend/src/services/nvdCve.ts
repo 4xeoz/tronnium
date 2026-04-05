@@ -39,6 +39,8 @@ const NVD_API_KEY = process.env.NVD_API_KEY || "";
 const RATE_LIMIT_MS = NVD_API_KEY ? 600 : 6000; 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
+// Maximum scan lookback period (5 years)
+export const MAX_SCAN_LOOKBACK_YEARS = 5;
 
 let lastRequestTime = 0;
 const cveCache = new Map<string, { data: CveData[], timestamp: number }>();
@@ -52,9 +54,18 @@ async function enforceRateLimit(): Promise<void> {
     lastRequestTime = Date.now();
 }
 
+// Generate cache key including date range
+function getCacheKey(cpeName: string, pubStartDate?: Date, pubEndDate?: Date): string {
+    if (!pubStartDate && !pubEndDate) return cpeName;
+    const start = pubStartDate ? pubStartDate.toISOString().split('T')[0] : 'beginning';
+    const end = pubEndDate ? pubEndDate.toISOString().split('T')[0] : 'now';
+    return `${cpeName}:${start}:${end}`;
+}
+
 // check if the cach is still valid
-function isCacheValid(cpeName: string): boolean {
-    const cached = cveCache.get(cpeName);
+function isCacheValid(cpeName: string, pubStartDate?: Date, pubEndDate?: Date): boolean {
+    const cacheKey = getCacheKey(cpeName, pubStartDate, pubEndDate);
+    const cached = cveCache.get(cacheKey);
     if(!cached) return false;
     const age = Date.now() - cached.timestamp;
     return age < CACHE_TTL_MS;
@@ -120,12 +131,21 @@ function mapCvssV3ToSeverity(score: number): VulnSeverity {
 /**
  * Fetch CVE data from NVD for a given CPE name
  * Rate-limited and cached (mirrors cpe.ts pattern)
+ * 
+ * @param cpeName - The CPE name to search for
+ * @param pubStartDate - Optional: Only return CVEs published on or after this date
+ * @param pubEndDate - Optional: Only return CVEs published on or before this date
  */
-
-export async function fetchCvesFroCpe(cpeName: string): Promise<CveData[]> {
+export async function fetchCvesFroCpe(
+    cpeName: string, 
+    pubStartDate?: Date, 
+    pubEndDate?: Date
+): Promise<CveData[]> {
+    const cacheKey = getCacheKey(cpeName, pubStartDate, pubEndDate);
+    
     // check cache first
-    if (isCacheValid(cpeName)) {
-        return cveCache.get(cpeName)!.data;
+    if (isCacheValid(cpeName, pubStartDate, pubEndDate)) {
+        return cveCache.get(cacheKey)!.data;
     }
 
     // enforce rate limit
@@ -135,6 +155,14 @@ export async function fetchCvesFroCpe(cpeName: string): Promise<CveData[]> {
         const url = new URL("https://services.nvd.nist.gov/rest/json/cves/2.0");
         url.searchParams.set("cpeName", cpeName);
         url.searchParams.set("resultsPerPage", "100");
+
+        // Add date filters if provided
+        if (pubStartDate) {
+            url.searchParams.set("pubStartDate", pubStartDate.toISOString());
+        }
+        if (pubEndDate) {
+            url.searchParams.set("pubEndDate", pubEndDate.toISOString());
+        }
 
         const headers: Record<string, string> = {
             "content-type": "application/json",
@@ -169,7 +197,7 @@ export async function fetchCvesFroCpe(cpeName: string): Promise<CveData[]> {
         });
         
         // cache the result
-        cveCache.set(cpeName, { data: cveData, timestamp: Date.now() });
+        cveCache.set(cacheKey, { data: cveData, timestamp: Date.now() });
 
         return cveData;
     } catch (error) {
@@ -178,10 +206,32 @@ export async function fetchCvesFroCpe(cpeName: string): Promise<CveData[]> {
     }
 }
 
-export function clearCveCache( cpeName?: string): void {
+export function clearCveCache(cpeName?: string): void {
     if (cpeName) {
-        cveCache.delete(cpeName);
+        // Clear all cache entries that start with this CPE name
+        for (const key of cveCache.keys()) {
+            if (key.startsWith(cpeName)) {
+                cveCache.delete(key);
+            }
+        }
     } else {
         cveCache.clear();
     }
+}
+
+/**
+ * Get the maximum allowed lookback date (5 years ago)
+ */
+export function getMaxLookbackDate(): Date {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() - MAX_SCAN_LOOKBACK_YEARS);
+    return date;
+}
+
+/**
+ * Validate if a date is within the allowed lookback period
+ */
+export function isValidLookbackDate(date: Date): boolean {
+    const maxLookback = getMaxLookbackDate();
+    return date >= maxLookback && date <= new Date();
 }

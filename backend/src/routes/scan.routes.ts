@@ -4,6 +4,8 @@ import {
   startScanHandler,
   getLatestScanHandler,
   getScanHistoryHandler,
+  getScanSettingsHandler,
+  getScanByIdHandler,
 } from "../controllers/scan.controller";
 
 const scanRouter = Router();
@@ -30,5 +32,18 @@ scanRouter.get("/:environmentId/latest", getLatestScanHandler);
  * Note: Uses GET because EventSource only supports GET requests
  */
 scanRouter.get("/:environmentId/start", startScanHandler);
+
+/**
+ * GET /scans/:environmentId/settings
+ * Get scan settings and configuration options
+ * Returns last scan date, max lookback date, etc.
+ */
+scanRouter.get("/:environmentId/settings", getScanSettingsHandler);
+
+/**
+ * GET /scans/:environmentId/:scanId
+ * Get a single scan by ID with full details
+ */
+scanRouter.get("/:environmentId/:scanId", getScanByIdHandler);
 
 export default scanRouter;
