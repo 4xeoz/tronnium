@@ -27,6 +27,8 @@ import {
 } from "react-icons/fi";
 import { getEnvironment, getAssets, type Environment, type Asset } from "@/lib/api";
 import { getLatestScan, getScanHistory, getRiskLevel, useScan, useUser, type LatestScan, type ScanHistoryItem } from "@/lib/api";
+import { getWorkflowStats, getWorkflows, type WorkflowStats, type WorkflowItem } from "@/lib/api/vulnerabilityWorkflow";
+import { getDaysOpen, getSlaStatus } from "@/lib/vulnAge";
 import AddAssetSlideOver from "@/components/assets/AddAssetSlideOver";
 import AssetDetailsSlideOver from "@/components/assets/AssetDetailsSlideOver";
 import DevModeModal from "@/components/dev/DevModeModal";
@@ -227,16 +229,26 @@ function AssetTypeDistribution({ assets }: { assets: Asset[] }) {
   );
 }
 
+const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
+const SEVERITY_BADGE: Record<string, { bg: string; text: string }> = {
+  CRITICAL: { bg: "bg-red-500",    text: "text-white" },
+  HIGH:     { bg: "bg-orange-500", text: "text-white" },
+  MEDIUM:   { bg: "bg-yellow-500", text: "text-black" },
+  LOW:      { bg: "bg-blue-400",   text: "text-white" },
+};
+
 // ============== Asset Card (grid item) ==============
 
 function AssetCard({
   asset,
   onClick,
   vulnCount,
+  highestSeverity,
 }: {
   asset: Asset;
   onClick: () => void;
   vulnCount?: number;
+  highestSeverity?: string | null;
 }) {
   const cpeList = Array.isArray(asset.cpes) ? asset.cpes : [];
   const Icon = typeIcons[asset.type] || typeIcons.unknown;
@@ -269,11 +281,15 @@ function AssetCard({
             />
             <span className="text-[10px] text-text-muted capitalize">{asset.status || "unknown"}</span>
           </div>
-          {vulnCount !== undefined && vulnCount > 0 && (
+          {vulnCount !== undefined && vulnCount > 0 && highestSeverity && SEVERITY_BADGE[highestSeverity] ? (
+            <span className={`px-1.5 py-0.5 text-[9px] rounded font-bold ${SEVERITY_BADGE[highestSeverity].bg} ${SEVERITY_BADGE[highestSeverity].text}`}>
+              {highestSeverity === "CRITICAL" ? "CRIT" : highestSeverity} · {vulnCount}
+            </span>
+          ) : vulnCount !== undefined && vulnCount > 0 ? (
             <span className="px-1.5 py-0.5 bg-error-bg text-error-text text-[9px] rounded font-medium">
               {vulnCount} vuln{vulnCount > 1 ? "s" : ""}
             </span>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -338,6 +354,9 @@ export default function EnvironmentDashboardPage() {
   // Security data
   const [latestScan, setLatestScan] = useState<LatestScan | null>(null);
   const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([]);
+  const [workflowStats, setWorkflowStats] = useState<WorkflowStats | null>(null);
+  const [openWorkflows, setOpenWorkflows] = useState<WorkflowItem[]>([]);
+  const [showAllAssets, setShowAllAssets] = useState(false);
   
   // Scan context for live updates
   const { isScanning, progress, scanResult: contextScanResult, environmentId: scanningEnvId, configureAndStartScan: contextStartScan } = useScan();
@@ -349,16 +368,20 @@ export default function EnvironmentDashboardPage() {
   const loadEnvironment = useCallback(async () => {
     try {
       setError(null);
-      const [envData, assetsData, scanData, historyData] = await Promise.all([
+      const [envData, assetsData, scanData, historyData, statsData, openWfs] = await Promise.all([
         getEnvironment(envId),
         getAssets(envId),
         getLatestScan(envId).catch(() => null),
         getScanHistory(envId, 5).catch(() => ({ data: [] })),
+        getWorkflowStats(envId).catch(() => null),
+        getWorkflows(envId, { status: "OPEN" }).catch(() => null),
       ]);
       setEnvironment(envData.data);
       setAssets(assetsData.data);
       setLatestScan(scanData?.data || null);
       setScanHistory(historyData.data);
+      if (statsData?.data) setWorkflowStats(statsData.data);
+      if (openWfs?.data) setOpenWorkflows(openWfs.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load environment");
     } finally {
@@ -392,17 +415,42 @@ export default function EnvironmentDashboardPage() {
   const otAssets = assets.filter((a) => a.domain === "OT").length;
   const activeAssets = assets.filter((a) => a.status === "active").length;
   
-  // Get vulnerability count per asset from latest scan
+  // Per-asset vuln data: count + highest severity (active threats only)
   const assetVulnMap = latestScan?.assetScans?.reduce((acc, as) => {
-    acc[as.asset.id] = as.vulnerabilities?.length || 0;
+    let highest: string | null = null;
+    let count = 0;
+    for (const v of as.vulnerabilities || []) {
+      count++;
+      const sev = v.vulnerability.severity;
+      if (!highest || (SEVERITY_ORDER[sev] ?? 0) > (SEVERITY_ORDER[highest] ?? 0)) highest = sev;
+    }
+    acc[as.asset.id] = { count, highestSeverity: highest };
     return acc;
-  }, {} as Record<string, number>) || {};
+  }, {} as Record<string, { count: number; highestSeverity: string | null }>) || {};
+
+  // SLA overdue count from open workflows
+  const overdueCount = openWorkflows.filter(wf => {
+    const days = getDaysOpen(wf.firstSeenAt);
+    return getSlaStatus(days, wf.severity) === "overdue";
+  }).length;
+
+  // Active (non-resolved) vuln counts for VulnBarChart
+  const activeVulnCounts = latestScan?.assetScans?.reduce(
+    (acc, as) => {
+      as.vulnerabilities?.forEach(v => {
+        const sev = v.vulnerability.severity;
+        if (sev === "CRITICAL") acc.critical++;
+        else if (sev === "HIGH") acc.high++;
+        else if (sev === "MEDIUM") acc.medium++;
+        else if (sev === "LOW") acc.low++;
+      });
+      return acc;
+    },
+    { critical: 0, high: 0, medium: 0, low: 0 }
+  ) || { critical: 0, high: 0, medium: 0, low: 0 };
 
   // Recent scans trend
   const recentScans = scanHistory.slice(0, 3);
-  const hasVulnTrend = recentScans.length >= 2 
-    ? recentScans[0].vulnerabilitiesFound - recentScans[1].vulnerabilitiesFound 
-    : 0;
 
   if (isLoading) {
     return (
@@ -568,24 +616,25 @@ export default function EnvironmentDashboardPage() {
                 )
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredAssets.slice(0, 6).map((asset) => (
+                  {(showAllAssets ? filteredAssets : filteredAssets.slice(0, 6)).map((asset) => (
                     <AssetCard
                       key={asset.id}
                       asset={asset}
                       onClick={() => setSelectedAsset(asset)}
-                      vulnCount={assetVulnMap[asset.id]}
+                      vulnCount={assetVulnMap[asset.id]?.count}
+                      highestSeverity={assetVulnMap[asset.id]?.highestSeverity}
                     />
                   ))}
                 </div>
               )}
-              
+
               {filteredAssets.length > 6 && (
                 <div className="mt-4 text-center">
-                  <button 
-                    onClick={() => {/* TODO: Show all assets in modal or expand */}}
+                  <button
+                    onClick={() => setShowAllAssets(v => !v)}
                     className="text-sm text-brand-1 hover:underline"
                   >
-                    View all {filteredAssets.length} assets
+                    {showAllAssets ? "Show less" : `View all ${filteredAssets.length} assets`}
                   </button>
                 </div>
               )}
@@ -602,11 +651,21 @@ export default function EnvironmentDashboardPage() {
                 <FiShield className="w-4 h-4 text-brand-1" />
                 Security Status
               </h3>
-              {isScanningThisEnv && (
-                <span className="px-2 py-0.5 bg-brand-1/10 text-brand-1 text-xs rounded-full animate-pulse">
-                  Scanning...
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {overdueCount > 0 && (
+                  <span
+                    title={`${overdueCount} vuln${overdueCount > 1 ? "s" : ""} past SLA deadline`}
+                    className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full font-bold"
+                  >
+                    {overdueCount} overdue
+                  </span>
+                )}
+                {isScanningThisEnv && (
+                  <span className="px-2 py-0.5 bg-brand-1/10 text-brand-1 text-xs rounded-full animate-pulse">
+                    Scanning...
+                  </span>
+                )}
+              </div>
             </div>
 
             {isScanningThisEnv ? (
@@ -630,13 +689,13 @@ export default function EnvironmentDashboardPage() {
                   </div>
                 </div>
 
-                {/* Vulnerability Breakdown */}
-                {latestScan.vulnerabilitiesFound > 0 ? (
+                {/* Vulnerability Breakdown — active threats only */}
+                {(activeVulnCounts.critical + activeVulnCounts.high + activeVulnCounts.medium + activeVulnCounts.low) > 0 ? (
                   <VulnBarChart
-                    critical={latestScan.criticalCount}
-                    high={latestScan.highCount}
-                    medium={latestScan.mediumCount}
-                    low={latestScan.lowCount}
+                    critical={activeVulnCounts.critical}
+                    high={activeVulnCounts.high}
+                    medium={activeVulnCounts.medium}
+                    low={activeVulnCounts.low}
                   />
                 ) : (
                   <div className="flex items-center gap-2 text-success-text bg-success-bg rounded-lg p-3">
@@ -688,6 +747,40 @@ export default function EnvironmentDashboardPage() {
             <AssetTypeDistribution assets={assets} />
           </div>
 
+          {/* Remediation Status */}
+          {workflowStats && workflowStats.total > 0 && (
+            <div className="bg-surface rounded-xl border border-border p-5 flex-shrink-0">
+              <h3 className="font-semibold text-text-primary mb-4 flex items-center gap-2">
+                <FiActivity className="w-4 h-4 text-brand-1" />
+                Remediation
+              </h3>
+              <div className="space-y-2">
+                {[
+                  { label: "Open",        value: workflowStats.open,       bg: "bg-error-bg",    text: "text-error-text",    bar: "bg-red-500" },
+                  { label: "In Progress", value: workflowStats.inProgress, bg: "bg-warning-bg",  text: "text-warning-text",  bar: "bg-amber-500" },
+                  { label: "Resolved",    value: workflowStats.resolved,   bg: "bg-success-bg",  text: "text-success-text",  bar: "bg-green-500" },
+                ].map(({ label, value, bg, text, bar }) => {
+                  const pct = workflowStats.total > 0 ? (value / workflowStats.total) * 100 : 0;
+                  return (
+                    <div key={label} className="flex items-center gap-3">
+                      <span className="text-xs text-text-muted w-20">{label}</span>
+                      <div className="flex-1 h-2 bg-surface-secondary rounded-full overflow-hidden">
+                        <div className={`h-full ${bar} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${bg} ${text} w-8 text-center`}>{value}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <button
+                onClick={() => router.push(`/environments/${envId}/security`)}
+                className="w-full mt-4 text-xs text-brand-1 hover:underline flex items-center justify-center gap-1"
+              >
+                Manage workflows <FiChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
           {/* Recent Activity - Fixed */}
           {scanHistory.length > 0 && (
             <div className="bg-surface rounded-xl border border-border p-5 flex-shrink-0">
@@ -696,32 +789,42 @@ export default function EnvironmentDashboardPage() {
                 Recent Scans
               </h3>
               <div className="space-y-3">
-                {scanHistory.slice(0, 3).map((scan, idx) => (
-                  <div key={scan.id} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      {scan.status === "COMPLETED" ? (
-                        <FiCheckCircle className={`w-4 h-4 ${scan.vulnerabilitiesFound > 0 ? "text-warning-text" : "text-success-text"}`} />
-                      ) : (
-                        <FiXCircle className="w-4 h-4 text-error-text" />
-                      )}
-                      <span className="text-text-secondary">
-                        {new Date(scan.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {scan.vulnerabilitiesFound > 0 && (
-                        <span className="text-xs px-1.5 py-0.5 bg-error-bg text-error-text rounded">
-                          {scan.vulnerabilitiesFound} vulns
+                {scanHistory.slice(0, 4).map((scan, idx) => {
+                  const prev = scanHistory[idx + 1];
+                  const delta = prev ? scan.vulnerabilitiesFound - prev.vulnerabilitiesFound : null;
+                  return (
+                    <div key={scan.id} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        {scan.status === "COMPLETED" ? (
+                          <FiCheckCircle className={`w-4 h-4 ${scan.vulnerabilitiesFound > 0 ? "text-warning-text" : "text-success-text"}`} />
+                        ) : (
+                          <FiXCircle className="w-4 h-4 text-error-text" />
+                        )}
+                        <span className="text-text-secondary">
+                          {new Date(scan.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                         </span>
-                      )}
-                      {scan.riskScore !== null && (
-                        <span className={`text-xs font-medium ${getRiskLevel(scan.riskScore).color}`}>
-                          {scan.riskScore.toFixed(0)}
-                        </span>
-                      )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {scan.vulnerabilitiesFound > 0 && (
+                          <span className="text-xs px-1.5 py-0.5 bg-error-bg text-error-text rounded">
+                            {scan.vulnerabilitiesFound} vulns
+                          </span>
+                        )}
+                        {delta !== null && delta !== 0 && (
+                          <span className={`text-xs font-medium flex items-center gap-0.5 ${delta > 0 ? "text-error-text" : "text-success-text"}`}>
+                            <FiTrendingUp className={`w-3 h-3 ${delta > 0 ? "" : "rotate-180"}`} />
+                            {Math.abs(delta)}
+                          </span>
+                        )}
+                        {scan.riskScore !== null && (
+                          <span className={`text-xs font-medium ${getRiskLevel(scan.riskScore).color}`}>
+                            {scan.riskScore.toFixed(0)}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               {scanHistory.length > 3 && (
                 <button 
