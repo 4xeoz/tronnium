@@ -4,20 +4,24 @@ import MapSidebar from '@/components/map/MapSidebar'
 import AssetNode from '@/components/map/AssetNode'
 import DependencyEdge from '@/components/map/DependencyEdge'
 import RelationshipSidebar from '@/components/map/RelationshipSidebar'
+import VulnDetailSlideOver, { type SelectedVuln } from '@/components/security/VulnDetailSlideOver'
 import {
   getAllRelationships,
   getAssets,
   createRelationship,
   updateRelationship,
   deleteRelationship,
+  getLatestScan,
   type Asset,
   type Relationship,
   type RelationType,
   type CriticalityLevel,
+  type ScanSeverity,
 } from '@/lib/api'
+import { getWorkflows, type WorkflowItem } from '@/lib/api/vulnerabilityWorkflow'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -31,8 +35,17 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { updateAseetPosition } from '@/lib/api/assets'
-import { useRef } from 'react'
-import { on } from 'events'
+
+export type VulnSummary = {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  total: number;
+  highestSeverity: ScanSeverity | null;
+}
+
+const EMPTY_VULN_SUMMARY: VulnSummary = { critical: 0, high: 0, medium: 0, low: 0, total: 0, highestSeverity: null }
 
 
 
@@ -51,6 +64,8 @@ const Page = () => {
 
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null)
+  const [selectedVuln, setSelectedVuln] = useState<SelectedVuln | null>(null)
+  const [workflowsForAsset, setWorkflowsForAsset] = useState<Map<string, WorkflowItem>>(new Map())
   const [error, setError] = useState<any>(null)
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null)
 
@@ -71,6 +86,13 @@ const Page = () => {
     queryKey: ['relationships', envId],
     queryFn: async () => getAllRelationships(envId),
     staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  })
+
+  const { data: latestScanRes } = useQuery({
+    queryKey: ['latestScan', envId],
+    queryFn: async () => getLatestScan(envId),
+    staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
 
@@ -136,6 +158,33 @@ const Page = () => {
 
   const assets = ResponseOfAssets?.data || [];
 
+  // Build per-asset vulnerability summary from latest scan
+  const assetVulnMap = useMemo(() => {
+    const map = new Map<string, VulnSummary>()
+    const assetScans = latestScanRes?.data?.assetScans
+    if (!assetScans) return map
+    const severityOrder: ScanSeverity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']
+    for (const assetScan of assetScans) {
+      const counts = { critical: 0, high: 0, medium: 0, low: 0, total: 0 }
+      for (const v of assetScan.vulnerabilities) {
+        const sev = v.vulnerability.severity
+        counts.total++
+        if (sev === 'CRITICAL') counts.critical++
+        else if (sev === 'HIGH') counts.high++
+        else if (sev === 'MEDIUM') counts.medium++
+        else if (sev === 'LOW') counts.low++
+      }
+      const highestSeverity = severityOrder.find(s =>
+        s === 'CRITICAL' ? counts.critical > 0 :
+        s === 'HIGH'     ? counts.high > 0 :
+        s === 'MEDIUM'   ? counts.medium > 0 :
+        s === 'LOW'      ? counts.low > 0 : false
+      ) ?? null
+      map.set(assetScan.asset.id, { ...counts, highestSeverity })
+    }
+    return map
+  }, [latestScanRes])
+
   // ===== NODE/EDGE CONVERSION =====
 
   const assetNodes = useMemo(() => {
@@ -158,9 +207,9 @@ const Page = () => {
         x: asset.x ?? 60 + (idx % cols) * xGap,
         y: asset.y ?? 60 + Math.floor(idx / cols) * yGap,
       },
-      data: { asset, label: asset.name },
+      data: { asset, label: asset.name, vulnSummary: assetVulnMap.get(asset.id) ?? EMPTY_VULN_SUMMARY },
     })) as Node[]
-  }, [ResponseOfAssets])
+  }, [ResponseOfAssets, assetVulnMap])
 
   const relationshipEdges = useMemo(() => {
     if (!ResponseOfrelationships) return [] as Edge[]
@@ -412,7 +461,17 @@ const Page = () => {
 
       {/* Asset sidebar */}
       {selectedAsset && !selectedEdge && (
-        <MapSidebar asset={selectedAsset} onClose={() => setSelectedAsset(null)} />
+        <MapSidebar
+          asset={selectedAsset}
+          environmentId={envId}
+          onClose={() => setSelectedAsset(null)}
+          onVulnClick={setSelectedVuln}
+          onWorkflowsLoaded={wfs => {
+            const map = new Map<string, WorkflowItem>()
+            wfs.forEach(w => map.set(`${w.vulnerabilityId}-${w.assetId}-${w.cpeName}`, w))
+            setWorkflowsForAsset(map)
+          }}
+        />
       )}
 
       {/* Relationship sidebar */}
@@ -433,6 +492,19 @@ const Page = () => {
           }}
           isLoading={updateMutation.isPending || deleteMutation.isPending}
           error={error}
+        />
+      )}
+
+      {/* CVE detail slide-over */}
+      {selectedVuln && (
+        <VulnDetailSlideOver
+          vuln={selectedVuln}
+          workflow={workflowsForAsset.get(`${selectedVuln.vulnerabilityId}-${selectedVuln.assetId}-${selectedVuln.cpeName}`)}
+          environmentId={envId}
+          onClose={() => setSelectedVuln(null)}
+          onWorkflowSaved={updated => {
+            setWorkflowsForAsset(prev => new Map(prev.set(`${updated.vulnerabilityId}-${updated.assetId}-${updated.cpeName}`, updated)))
+          }}
         />
       )}
     </div>
