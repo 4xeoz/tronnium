@@ -24,10 +24,13 @@ import {
   FiCheckCircle,
   FiXCircle,
   FiCode,
+  FiAlertOctagon,
+  FiUserX,
+  FiList,
 } from "react-icons/fi";
 import { getEnvironment, getAssets, type Environment, type Asset } from "@/lib/api";
 import { getLatestScan, getScanHistory, getRiskLevel, useScan, useUser, type LatestScan, type ScanHistoryItem } from "@/lib/api";
-import { getWorkflowStats, getWorkflows, type WorkflowStats, type WorkflowItem } from "@/lib/api/vulnerabilityWorkflow";
+import { getWorkflowStats, getWorkflows, type WorkflowStats, type WorkflowItem, type VulnStatus } from "@/lib/api/vulnerabilityWorkflow";
 import { getDaysOpen, getSlaStatus } from "@/lib/vulnAge";
 import AddAssetSlideOver from "@/components/assets/AddAssetSlideOver";
 import AssetDetailsSlideOver from "@/components/assets/AssetDetailsSlideOver";
@@ -244,25 +247,43 @@ function AssetCard({
   onClick,
   vulnCount,
   highestSeverity,
+  wasScanned,
 }: {
   asset: Asset;
   onClick: () => void;
   vulnCount?: number;
   highestSeverity?: string | null;
+  wasScanned?: boolean;
 }) {
   const cpeList = Array.isArray(asset.cpes) ? asset.cpes : [];
   const Icon = typeIcons[asset.type] || typeIcons.unknown;
   const isActive = asset.status === "active";
+  const isSecure = wasScanned && (vulnCount === 0 || vulnCount === undefined);
 
   return (
     <button
       onClick={onClick}
-      className="w-full bg-surface rounded-xl border border-border p-4 text-left hover:border-border-secondary hover:shadow-sm transition-all group"
+      className={`w-full bg-surface rounded-xl border p-4 text-left hover:shadow-sm transition-all group ${
+        highestSeverity === "CRITICAL" ? "border-red-500/40 hover:border-red-500/70" :
+        highestSeverity === "HIGH"     ? "border-orange-500/40 hover:border-orange-500/70" :
+        isSecure                       ? "border-green-500/30 hover:border-green-500/50" :
+        "border-border hover:border-border-secondary"
+      }`}
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-surface-secondary flex items-center justify-center">
-            <Icon className="w-5 h-5 text-text-muted" />
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+            highestSeverity === "CRITICAL" ? "bg-red-500/10" :
+            highestSeverity === "HIGH"     ? "bg-orange-500/10" :
+            isSecure                       ? "bg-green-500/10" :
+            "bg-surface-secondary"
+          }`}>
+            <Icon className={`w-5 h-5 ${
+              highestSeverity === "CRITICAL" ? "text-red-500" :
+              highestSeverity === "HIGH"     ? "text-orange-500" :
+              isSecure                       ? "text-green-500" :
+              "text-text-muted"
+            }`} />
           </div>
           <div>
             <div className="font-medium text-text-primary text-sm">{asset.name}</div>
@@ -273,11 +294,7 @@ function AssetCard({
           <div className="flex items-center gap-1.5">
             <div
               className="w-2 h-2 rounded-full"
-              style={{
-                backgroundColor: isActive
-                  ? "var(--status-active)"
-                  : "var(--status-inactive)",
-              }}
+              style={{ backgroundColor: isActive ? "var(--status-active)" : "var(--status-inactive)" }}
             />
             <span className="text-[10px] text-text-muted capitalize">{asset.status || "unknown"}</span>
           </div>
@@ -285,9 +302,9 @@ function AssetCard({
             <span className={`px-1.5 py-0.5 text-[9px] rounded font-bold ${SEVERITY_BADGE[highestSeverity].bg} ${SEVERITY_BADGE[highestSeverity].text}`}>
               {highestSeverity === "CRITICAL" ? "CRIT" : highestSeverity} · {vulnCount}
             </span>
-          ) : vulnCount !== undefined && vulnCount > 0 ? (
-            <span className="px-1.5 py-0.5 bg-error-bg text-error-text text-[9px] rounded font-medium">
-              {vulnCount} vuln{vulnCount > 1 ? "s" : ""}
+          ) : isSecure ? (
+            <span className="px-1.5 py-0.5 bg-green-500/15 text-green-600 text-[9px] rounded font-medium flex items-center gap-0.5">
+              <FiCheckCircle className="w-2.5 h-2.5" /> Secure
             </span>
           ) : null}
         </div>
@@ -295,38 +312,26 @@ function AssetCard({
 
       {/* Badges row */}
       <div className="flex items-center gap-1.5 mb-3">
-        <span
-          className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-            asset.domain === "IT"
-              ? "bg-info-bg text-info-text"
-              : asset.domain === "OT"
-              ? "bg-warning-bg text-warning-text"
-              : "bg-surface-secondary text-text-muted"
-          }`}
-        >
+        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+          asset.domain === "IT" ? "bg-info-bg text-info-text" :
+          asset.domain === "OT" ? "bg-warning-bg text-warning-text" :
+          "bg-surface-secondary text-text-muted"
+        }`}>
           {asset.domain}
         </span>
-        <span
-          className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-            cpeList.length > 0
-              ? "bg-success-bg text-success-text"
-              : "bg-surface-secondary text-text-muted"
-          }`}
-        >
-          {cpeList.length > 0
-            ? `${cpeList.length} CPE${cpeList.length > 1 ? "s" : ""}`
-            : "No CPE"}
+        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+          cpeList.length > 0 ? "bg-success-bg text-success-text" : "bg-surface-secondary text-text-muted"
+        }`}>
+          {cpeList.length > 0 ? `${cpeList.length} CPE${cpeList.length > 1 ? "s" : ""}` : "No CPE"}
         </span>
       </div>
 
-      {/* CPE name preview */}
       {cpeList.length > 0 && (
         <div className="text-[10px] text-text-muted font-mono truncate bg-surface-secondary rounded px-2 py-1">
           {cpeList[0].cpeName}
         </div>
       )}
 
-      {/* Hover indicator */}
       <div className="flex items-center justify-end mt-3 text-text-muted group-hover:text-text-secondary transition-colors">
         <span className="text-[10px] mr-1">Details</span>
         <FiChevronRight className="w-3 h-3" />
@@ -355,7 +360,7 @@ export default function EnvironmentDashboardPage() {
   const [latestScan, setLatestScan] = useState<LatestScan | null>(null);
   const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([]);
   const [workflowStats, setWorkflowStats] = useState<WorkflowStats | null>(null);
-  const [openWorkflows, setOpenWorkflows] = useState<WorkflowItem[]>([]);
+  const [allWorkflows, setAllWorkflows] = useState<WorkflowItem[]>([]);
   const [showAllAssets, setShowAllAssets] = useState(false);
   
   // Scan context for live updates
@@ -368,20 +373,20 @@ export default function EnvironmentDashboardPage() {
   const loadEnvironment = useCallback(async () => {
     try {
       setError(null);
-      const [envData, assetsData, scanData, historyData, statsData, openWfs] = await Promise.all([
+      const [envData, assetsData, scanData, historyData, statsData, wfsData] = await Promise.all([
         getEnvironment(envId),
         getAssets(envId),
         getLatestScan(envId).catch(() => null),
         getScanHistory(envId, 5).catch(() => ({ data: [] })),
         getWorkflowStats(envId).catch(() => null),
-        getWorkflows(envId, { status: "OPEN" }).catch(() => null),
+        getWorkflows(envId).catch(() => null),          // ALL workflows for status lookup
       ]);
       setEnvironment(envData.data);
       setAssets(assetsData.data);
       setLatestScan(scanData?.data || null);
       setScanHistory(historyData.data);
       if (statsData?.data) setWorkflowStats(statsData.data);
-      if (openWfs?.data) setOpenWorkflows(openWfs.data);
+      if (wfsData?.data) setAllWorkflows(wfsData.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load environment");
     } finally {
@@ -400,26 +405,23 @@ export default function EnvironmentDashboardPage() {
     }
   }, [contextScanResult, scanningEnvId, envId, loadEnvironment]);
 
-  // Filter assets
-  const filteredAssets = assetSearch
-    ? assets.filter(
-        (a) =>
-          a.name.toLowerCase().includes(assetSearch.toLowerCase()) ||
-          a.type.toLowerCase().includes(assetSearch.toLowerCase())
-      )
-    : assets;
-
   // Calculate stats
   const assetsWithCPEs = assets.filter((a) => Array.isArray(a.cpes) && a.cpes.length > 0).length;
-  const itAssets = assets.filter((a) => a.domain === "IT").length;
-  const otAssets = assets.filter((a) => a.domain === "OT").length;
   const activeAssets = assets.filter((a) => a.status === "active").length;
-  
-  // Per-asset vuln data: count + highest severity (active threats only)
+
+  // Build workflow status lookup: "vulnId-assetId-cpeName" → status
+  const INACTIVE: Set<VulnStatus> = new Set(["RESOLVED", "FALSE_POSITIVE", "RISK_ACCEPTED"]);
+  const wfStatusLookup = new Map<string, VulnStatus>();
+  allWorkflows.forEach(w => wfStatusLookup.set(`${w.vulnerabilityId}-${w.assetId}-${w.cpeName}`, w.status));
+
+  // Per-asset vuln data filtered to ACTIVE threats only
   const assetVulnMap = latestScan?.assetScans?.reduce((acc, as) => {
     let highest: string | null = null;
     let count = 0;
     for (const v of as.vulnerabilities || []) {
+      const key = `${v.vulnerability.id}-${as.asset.id}-${v.cpeName}`;
+      const wfStatus = wfStatusLookup.get(key);
+      if (wfStatus && INACTIVE.has(wfStatus)) continue;   // skip resolved/accepted
       count++;
       const sev = v.vulnerability.severity;
       if (!highest || (SEVERITY_ORDER[sev] ?? 0) > (SEVERITY_ORDER[highest] ?? 0)) highest = sev;
@@ -428,29 +430,51 @@ export default function EnvironmentDashboardPage() {
     return acc;
   }, {} as Record<string, { count: number; highestSeverity: string | null }>) || {};
 
-  // SLA overdue count from open workflows
-  const overdueCount = openWorkflows.filter(wf => {
-    const days = getDaysOpen(wf.firstSeenAt);
-    return getSlaStatus(days, wf.severity) === "overdue";
-  }).length;
-
   // Active (non-resolved) vuln counts for VulnBarChart
-  const activeVulnCounts = latestScan?.assetScans?.reduce(
-    (acc, as) => {
-      as.vulnerabilities?.forEach(v => {
-        const sev = v.vulnerability.severity;
-        if (sev === "CRITICAL") acc.critical++;
-        else if (sev === "HIGH") acc.high++;
-        else if (sev === "MEDIUM") acc.medium++;
-        else if (sev === "LOW") acc.low++;
-      });
-      return acc;
-    },
-    { critical: 0, high: 0, medium: 0, low: 0 }
-  ) || { critical: 0, high: 0, medium: 0, low: 0 };
+  const activeVulnCounts = latestScan?.assetScans?.reduce((acc, as) => {
+    as.vulnerabilities?.forEach(v => {
+      const key = `${v.vulnerability.id}-${as.asset.id}-${v.cpeName}`;
+      const wfStatus = wfStatusLookup.get(key);
+      if (wfStatus && INACTIVE.has(wfStatus)) return;
+      const sev = v.vulnerability.severity;
+      if (sev === "CRITICAL") acc.critical++;
+      else if (sev === "HIGH") acc.high++;
+      else if (sev === "MEDIUM") acc.medium++;
+      else if (sev === "LOW") acc.low++;
+    });
+    return acc;
+  }, { critical: 0, high: 0, medium: 0, low: 0 }) || { critical: 0, high: 0, medium: 0, low: 0 };
 
-  // Recent scans trend
-  const recentScans = scanHistory.slice(0, 3);
+  const totalActiveThreats = activeVulnCounts.critical + activeVulnCounts.high + activeVulnCounts.medium + activeVulnCounts.low;
+
+  // Derived from allWorkflows
+  const openWorkflows = allWorkflows.filter(w => w.status === "OPEN");
+  const overdueCount = openWorkflows.filter(w => getSlaStatus(getDaysOpen(w.firstSeenAt), w.severity) === "overdue").length;
+  const unassignedCriticalHigh = openWorkflows.filter(w => !w.assigneeId && (w.severity === "CRITICAL" || w.severity === "HIGH")).length;
+
+  // Attention items — things a SOC analyst must act on now
+  const attentionItems: { icon: React.ElementType; text: string; cta: string; urgent: boolean }[] = [];
+  if (!latestScan) attentionItems.push({ icon: FiShield, text: "No security scan has been run yet", cta: "Run Scan", urgent: true });
+  if (overdueCount > 0) attentionItems.push({ icon: FiAlertOctagon, text: `${overdueCount} vulnerabilit${overdueCount > 1 ? "ies are" : "y is"} past SLA deadline`, cta: "View overdue", urgent: true });
+  if (unassignedCriticalHigh > 0) attentionItems.push({ icon: FiUserX, text: `${unassignedCriticalHigh} Critical/High vuln${unassignedCriticalHigh > 1 ? "s" : ""} unassigned`, cta: "Assign", urgent: false });
+  if (assets.length > 0 && assetsWithCPEs < assets.length) attentionItems.push({ icon: FiCpu, text: `${assets.length - assetsWithCPEs} asset${assets.length - assetsWithCPEs > 1 ? "s" : ""} missing CPE — won't be scanned`, cta: "Review", urgent: false });
+
+  // Sort assets: most at-risk first
+  const sortedAssets = [...assets].sort((a, b) => {
+    const aData = assetVulnMap[a.id];
+    const bData = assetVulnMap[b.id];
+    const aSev = SEVERITY_ORDER[aData?.highestSeverity ?? ""] ?? -1;
+    const bSev = SEVERITY_ORDER[bData?.highestSeverity ?? ""] ?? -1;
+    if (bSev !== aSev) return bSev - aSev;
+    return (bData?.count ?? 0) - (aData?.count ?? 0);
+  });
+
+  const filteredAssets = assetSearch
+    ? sortedAssets.filter(a =>
+        a.name.toLowerCase().includes(assetSearch.toLowerCase()) ||
+        a.type.toLowerCase().includes(assetSearch.toLowerCase())
+      )
+    : sortedAssets;
 
   if (isLoading) {
     return (
@@ -532,12 +556,39 @@ export default function EnvironmentDashboardPage() {
         </div>
       </div>
 
+      {/* Needs Attention Banner */}
+      {attentionItems.length > 0 && (
+        <div className={`rounded-xl border p-4 flex flex-col gap-2 ${attentionItems.some(i => i.urgent) ? "bg-error-bg border-error-border" : "bg-warning-bg border-warning-border"}`}>
+          <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${attentionItems.some(i => i.urgent) ? "text-error-text" : "text-warning-text"}`}>
+            Needs Attention
+          </p>
+          {attentionItems.map((item, i) => (
+            <div key={i} className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <item.icon className={`w-4 h-4 shrink-0 ${item.urgent ? "text-error-text" : "text-warning-text"}`} />
+                <span className="text-sm text-text-primary">{item.text}</span>
+              </div>
+              <button
+                onClick={() => item.cta === "Run Scan" ? contextStartScan(envId) : router.push(`/environments/${envId}/security`)}
+                className={`shrink-0 text-xs font-medium px-3 py-1 rounded-lg border transition-colors ${
+                  item.urgent
+                    ? "bg-error-text text-white hover:opacity-90 border-transparent"
+                    : "bg-surface text-text-primary hover:bg-surface-secondary border-border"
+                }`}
+              >
+                {item.cta}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Main Dashboard Grid - Scrollable Sections */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
         {/* Left Column - Asset Stats */}
         <div className="lg:col-span-2 flex flex-col gap-6 min-h-0">
-          {/* Quick Stats Row - Fixed height */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 ">
+          {/* Quick Stats Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard
               icon={<FiServer className="w-5 h-5 text-brand-1" />}
               label="Total Assets"
@@ -552,18 +603,44 @@ export default function EnvironmentDashboardPage() {
               trend={assetsWithCPEs === assets.length ? "up" : "neutral"}
             />
             <StatCard
-              icon={<FiDatabase className="w-5 h-5 text-info-text" />}
-              label="IT Assets"
-              value={itAssets}
-              sub={`${assets.length > 0 ? Math.round((itAssets / assets.length) * 100) : 0}%`}
+              icon={<FiAlertTriangle className="w-5 h-5 text-error-text" />}
+              label="Active Threats"
+              value={totalActiveThreats}
+              sub={totalActiveThreats === 0 ? "all clear" : `${activeVulnCounts.critical} critical`}
+              colorClass={totalActiveThreats > 0 ? "text-error-text" : "text-success-text"}
+              onClick={totalActiveThreats > 0 ? () => router.push(`/environments/${envId}/security`) : undefined}
             />
             <StatCard
-              icon={<FiHardDrive className="w-5 h-5 text-warning-text" />}
-              label="OT Assets"
-              value={otAssets}
-              sub={`${assets.length > 0 ? Math.round((otAssets / assets.length) * 100) : 0}%`}
+              icon={<FiList className="w-5 h-5 text-warning-text" />}
+              label="Open Workflows"
+              value={workflowStats?.open ?? 0}
+              sub={overdueCount > 0 ? `${overdueCount} overdue` : "on track"}
+              colorClass={overdueCount > 0 ? "text-error-text" : "text-warning-text"}
+              onClick={() => router.push(`/environments/${envId}/security`)}
             />
           </div>
+
+          {/* All-clear banner when scan ran with zero active threats */}
+          {latestScan && totalActiveThreats === 0 && assets.length > 0 && (
+            <div className="flex items-center gap-4 bg-success-bg border border-success-border rounded-xl px-5 py-4">
+              <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                <FiCheckCircle className="w-5 h-5 text-green-500" />
+              </div>
+              <div>
+                <p className="font-semibold text-success-text text-sm">Environment is secure</p>
+                <p className="text-success-text/70 text-xs mt-0.5">
+                  All {latestScan.vulnerabilitiesFound > 0 ? `${latestScan.vulnerabilitiesFound} detected` : ""} vulnerabilities are resolved or accepted.
+                  Last scan {new Date(latestScan.completedAt || "").toLocaleDateString()}.
+                </p>
+              </div>
+              <button
+                onClick={() => contextStartScan(envId)}
+                className="ml-auto shrink-0 text-xs px-3 py-1.5 rounded-lg bg-green-500/20 text-green-700 hover:bg-green-500/30 transition-colors font-medium"
+              >
+                Rescan
+              </button>
+            </div>
+          )}
 
           {/* Asset List Section - Scrollable */}
           <div className="flex-1 bg-surface rounded-xl border border-border overflow-hidden flex flex-col min-h-0">
@@ -623,6 +700,7 @@ export default function EnvironmentDashboardPage() {
                       onClick={() => setSelectedAsset(asset)}
                       vulnCount={assetVulnMap[asset.id]?.count}
                       highestSeverity={assetVulnMap[asset.id]?.highestSeverity}
+                      wasScanned={latestScan !== null}
                     />
                   ))}
                 </div>
