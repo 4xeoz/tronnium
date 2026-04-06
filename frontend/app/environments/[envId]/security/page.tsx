@@ -465,13 +465,20 @@ export default function SecurityPage() {
     [workflows]
   );
 
-  const severityCounts: Record<ScanSeverity, number> = {
-    CRITICAL: latestScan?.criticalCount || 0,
-    HIGH:     latestScan?.highCount || 0,
-    MEDIUM:   latestScan?.mediumCount || 0,
-    LOW:      latestScan?.lowCount || 0,
-    UNKNOWN:  0,
-  };
+  const INACTIVE_STATUSES = new Set<VulnStatus>(["RESOLVED", "FALSE_POSITIVE", "RISK_ACCEPTED"]);
+
+  // Only count active (OPEN / IN_PROGRESS) threats — resolved/accepted don't show as danger
+  const severityCounts = useMemo((): Record<ScanSeverity, number> => {
+    const counts: Record<ScanSeverity, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, UNKNOWN: 0 };
+    latestScan?.assetScans.forEach(a =>
+      a.vulnerabilities.forEach(v => {
+        const wf = getWorkflowForVuln(v.vulnerability.id, a.asset.id, v.cpeName);
+        if (wf && INACTIVE_STATUSES.has(wf.status)) return;
+        counts[v.vulnerability.severity] = (counts[v.vulnerability.severity] || 0) + 1;
+      })
+    );
+    return counts;
+  }, [latestScan, getWorkflowForVuln]);
 
   const filteredAssetScans = useMemo(() => {
     let filtered = latestScan?.assetScans || [];

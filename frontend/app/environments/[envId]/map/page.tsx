@@ -96,6 +96,13 @@ const Page = () => {
     refetchOnWindowFocus: false,
   })
 
+  const { data: workflowsRes } = useQuery({
+    queryKey: ['workflows', envId],
+    queryFn: async () => getWorkflows(envId),
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  })
+
   // ===== MUTATIONS =====
 
   const createMutation = useMutation({
@@ -158,7 +165,16 @@ const Page = () => {
 
   const assets = ResponseOfAssets?.data || [];
 
-  // Build per-asset vulnerability summary from latest scan
+  // Build per-asset vulnerability summary — only OPEN / IN_PROGRESS threats count as danger
+  const INACTIVE_STATUSES = new Set(['RESOLVED', 'FALSE_POSITIVE', 'RISK_ACCEPTED'])
+  const workflowLookup = useMemo(() => {
+    const map = new Map<string, string>() // key → status
+    workflowsRes?.data?.forEach(w =>
+      map.set(`${w.vulnerabilityId}-${w.assetId}-${w.cpeName}`, w.status)
+    )
+    return map
+  }, [workflowsRes])
+
   const assetVulnMap = useMemo(() => {
     const map = new Map<string, VulnSummary>()
     const assetScans = latestScanRes?.data?.assetScans
@@ -167,6 +183,8 @@ const Page = () => {
     for (const assetScan of assetScans) {
       const counts = { critical: 0, high: 0, medium: 0, low: 0, total: 0 }
       for (const v of assetScan.vulnerabilities) {
+        const wfStatus = workflowLookup.get(`${v.vulnerability.id}-${assetScan.asset.id}-${v.cpeName}`)
+        if (wfStatus && INACTIVE_STATUSES.has(wfStatus)) continue
         const sev = v.vulnerability.severity
         counts.total++
         if (sev === 'CRITICAL') counts.critical++
@@ -183,7 +201,7 @@ const Page = () => {
       map.set(assetScan.asset.id, { ...counts, highestSeverity })
     }
     return map
-  }, [latestScanRes])
+  }, [latestScanRes, workflowLookup])
 
   // ===== NODE/EDGE CONVERSION =====
 
