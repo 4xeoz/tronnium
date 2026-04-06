@@ -334,6 +334,12 @@ const Page = () => {
 
 
   
+  const handleWorkflowsLoaded = useCallback((wfs: WorkflowItem[]) => {
+    const map = new Map<string, WorkflowItem>()
+    wfs.forEach(w => map.set(`${w.vulnerabilityId}-${w.assetId}-${w.cpeName}`, w))
+    setWorkflowsForAsset(map)
+  }, [])
+
   // ===== RENDER =====
 
   const isLoading = assetsLoading || relationshipsLoading
@@ -466,11 +472,7 @@ const Page = () => {
           environmentId={envId}
           onClose={() => setSelectedAsset(null)}
           onVulnClick={setSelectedVuln}
-          onWorkflowsLoaded={wfs => {
-            const map = new Map<string, WorkflowItem>()
-            wfs.forEach(w => map.set(`${w.vulnerabilityId}-${w.assetId}-${w.cpeName}`, w))
-            setWorkflowsForAsset(map)
-          }}
+          onWorkflowsLoaded={handleWorkflowsLoaded}
         />
       )}
 
