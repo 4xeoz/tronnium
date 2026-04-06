@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
 import {
   FiPlay,
   FiCheckCircle,
@@ -38,9 +37,10 @@ import {
   type VulnStatus,
   type WorkflowStats,
 } from "@/lib/api/vulnerabilityWorkflow";
-import { Card, Badge } from "@/components/security/SecurityUI";
+import { Card, Badge, AgeBadge } from "@/components/security/SecurityUI";
 import BoardView from "@/components/security/BoardView";
 import OverviewPanel from "@/components/security/OverviewPanel";
+import VulnDetailSlideOver, { type SelectedVuln } from "@/components/security/VulnDetailSlideOver";
 import type { AssetScan as AssetScanItem, ScanSeverity } from "@/lib/api";
 
 // ============================================
@@ -153,10 +153,12 @@ function VulnerabilityTable({
   vulnerabilities,
   getWorkflowForVuln,
   onStatusChange,
+  onVulnClick,
 }: {
-  vulnerabilities: (AssetScanItem["vulnerabilities"][0] & { assetId: string })[];
+  vulnerabilities: (AssetScanItem["vulnerabilities"][0] & { assetId: string; assetName?: string })[];
   getWorkflowForVuln: (vulnId: string, assetId: string, cpeName: string) => WorkflowItem | undefined;
   onStatusChange: (id: string, status: VulnStatus) => void;
+  onVulnClick?: (vuln: SelectedVuln) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -167,6 +169,7 @@ function VulnerabilityTable({
             <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">Severity</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">Description</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">CVSS</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">Age</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">Status</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">Actions</th>
           </tr>
@@ -178,7 +181,28 @@ function VulnerabilityTable({
               <tr key={idx} className="hover:bg-surface-secondary/50 transition-colors">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-medium text-text-primary">{vuln.vulnerability.cveId}</span>
+                    {onVulnClick ? (
+                      <button
+                        onClick={() => onVulnClick({
+                          vulnerabilityId: vuln.vulnerability.id,
+                          assetId: vuln.assetId,
+                          cpeName: vuln.cpeName,
+                          cveId: vuln.vulnerability.cveId,
+                          description: vuln.vulnerability.description,
+                          severity: vuln.vulnerability.severity,
+                          cvssScore: vuln.vulnerability.cvssScore ?? null,
+                          cvssVector: (vuln.vulnerability as any).cvssVector ?? null,
+                          publishedDate: (vuln.vulnerability as any).publishedDate ?? null,
+                          lastModifiedDate: (vuln.vulnerability as any).lastModifiedDate ?? null,
+                          assetName: vuln.assetName ?? "",
+                        })}
+                        className="font-mono text-sm font-medium text-text-primary hover:text-brand-1 hover:underline text-left"
+                      >
+                        {vuln.vulnerability.cveId}
+                      </button>
+                    ) : (
+                      <span className="font-mono text-sm font-medium text-text-primary">{vuln.vulnerability.cveId}</span>
+                    )}
                     {vuln.vulnerability.isMock && <Badge variant="neutral" size="sm">MOCK</Badge>}
                   </div>
                 </td>
@@ -198,6 +222,12 @@ function VulnerabilityTable({
                   <span className="text-sm font-medium text-text-primary">
                     {vuln.vulnerability.cvssScore?.toFixed(1) || "N/A"}
                   </span>
+                </td>
+                <td className="px-4 py-3">
+                  <AgeBadge
+                    firstSeenAt={workflow?.firstSeenAt}
+                    severity={vuln.vulnerability.severity}
+                  />
                 </td>
                 <td className="px-4 py-3">
                   <StatusDropdown
@@ -242,10 +272,12 @@ function AssetAccordion({
   assetScan,
   getWorkflowForVuln,
   onStatusChange,
+  onVulnClick,
 }: {
   assetScan: AssetScanItem;
   getWorkflowForVuln: (vulnId: string, assetId: string, cpeName: string) => WorkflowItem | undefined;
   onStatusChange: (id: string, status: VulnStatus) => void;
+  onVulnClick?: (vuln: SelectedVuln) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const vulnCount = assetScan.vulnerabilities?.length || 0;
@@ -295,6 +327,7 @@ function AssetAccordion({
             vulnerabilities={vulnsWithAsset}
             getWorkflowForVuln={getWorkflowForVuln}
             onStatusChange={onStatusChange}
+            onVulnClick={onVulnClick}
           />
         </div>
       )}
@@ -368,6 +401,8 @@ export default function SecurityPage() {
   const [workflows, setWorkflows] = useState<Map<string, WorkflowItem>>(new Map());
   const [workflowStats, setWorkflowStats] = useState<WorkflowStats | null>(null);
   const [selectedSeverity, setSelectedSeverity] = useState<ScanSeverity | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<VulnStatus | null>(null);
+  const [selectedVuln, setSelectedVuln] = useState<SelectedVuln | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -424,8 +459,11 @@ export default function SecurityPage() {
     }
   };
 
-  const getWorkflowForVuln = (vulnId: string, assetId: string, cpeName: string) =>
-    workflows.get(`${vulnId}-${assetId}-${cpeName}`);
+  const getWorkflowForVuln = useCallback(
+    (vulnId: string, assetId: string, cpeName: string) =>
+      workflows.get(`${vulnId}-${assetId}-${cpeName}`),
+    [workflows]
+  );
 
   const severityCounts: Record<ScanSeverity, number> = {
     CRITICAL: latestScan?.criticalCount || 0,
@@ -442,6 +480,14 @@ export default function SecurityPage() {
         a.vulnerabilities.some(v => v.vulnerability.severity === selectedSeverity)
       );
     }
+    if (selectedStatus) {
+      filtered = filtered.filter(a =>
+        a.vulnerabilities.some(v => {
+          const wf = getWorkflowForVuln(v.vulnerability.id, a.asset.id, v.cpeName);
+          return (wf?.status ?? "OPEN") === selectedStatus;
+        })
+      );
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(a =>
@@ -453,7 +499,7 @@ export default function SecurityPage() {
       );
     }
     return filtered;
-  }, [latestScan?.assetScans, selectedSeverity, searchQuery]);
+  }, [latestScan?.assetScans, selectedSeverity, selectedStatus, searchQuery, getWorkflowForVuln]);
 
   // Convert risk score (0–100 = risk) to security score (0–100 = safe)
   const securityScore = latestScan?.riskScore != null ? Math.round(100 - latestScan.riskScore) : null;
@@ -538,7 +584,7 @@ export default function SecurityPage() {
           <div className="space-y-4">
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-medium text-text-secondary">Filter:</span>
+              <span className="text-sm font-medium text-text-secondary">Severity:</span>
               {(Object.keys(SEVERITY_CONFIG) as ScanSeverity[]).map(severity =>
                 severityCounts[severity] > 0 && (
                   <SeverityBadge
@@ -550,9 +596,28 @@ export default function SecurityPage() {
                   />
                 )
               )}
-              {selectedSeverity && (
+              <span className="text-sm font-medium text-text-secondary ml-2">Status:</span>
+              {VULN_STATUSES.map(status => {
+                const colors = STATUS_COLORS[status];
+                const isActive = selectedStatus === status;
+                return (
+                  <button
+                    key={status}
+                    onClick={() => setSelectedStatus(isActive ? null : status)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all text-xs font-medium ${
+                      isActive
+                        ? `${colors.bg} ${colors.border} ${colors.text}`
+                        : "bg-surface border-border text-text-secondary hover:border-border-secondary"
+                    }`}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${colors.dot}`} />
+                    {getStatusLabel(status)}
+                  </button>
+                );
+              })}
+              {(selectedSeverity || selectedStatus) && (
                 <button
-                  onClick={() => setSelectedSeverity(null)}
+                  onClick={() => { setSelectedSeverity(null); setSelectedStatus(null); }}
                   className="text-sm text-text-muted hover:text-text-primary font-medium flex items-center gap-1"
                 >
                   <FiXCircle className="w-4 h-4" />
@@ -582,6 +647,7 @@ export default function SecurityPage() {
                       assetScan={assetScan}
                       getWorkflowForVuln={getWorkflowForVuln}
                       onStatusChange={handleStatusChange}
+                      onVulnClick={setSelectedVuln}
                     />
                   ))}
                 </div>
@@ -603,10 +669,11 @@ export default function SecurityPage() {
               <Card padding="none">
                 <VulnerabilityTable
                   vulnerabilities={filteredAssetScans.flatMap(a =>
-                    a.vulnerabilities.map(v => ({ ...v, assetId: a.asset.id }))
+                    a.vulnerabilities.map(v => ({ ...v, assetId: a.asset.id, assetName: a.asset.name }))
                   )}
                   getWorkflowForVuln={getWorkflowForVuln}
                   onStatusChange={handleStatusChange}
+                  onVulnClick={setSelectedVuln}
                 />
               </Card>
             )}
@@ -620,6 +687,8 @@ export default function SecurityPage() {
                 onWorkflowCreated={workflow => {
                   setWorkflows(prev => new Map(prev.set(`${workflow.vulnerabilityId}-${workflow.assetId}-${workflow.cpeName}`, workflow)));
                 }}
+                onVulnClick={setSelectedVuln}
+                focusStatus={selectedStatus}
               />
             )}
 
@@ -637,6 +706,18 @@ export default function SecurityPage() {
           <EmptyState onScan={() => contextStartScan(envId)} />
         )}
       </div>
+
+      {selectedVuln && (
+        <VulnDetailSlideOver
+          vuln={selectedVuln}
+          workflow={getWorkflowForVuln(selectedVuln.vulnerabilityId, selectedVuln.assetId, selectedVuln.cpeName)}
+          environmentId={envId}
+          onClose={() => setSelectedVuln(null)}
+          onWorkflowSaved={updated => {
+            setWorkflows(prev => new Map(prev.set(`${updated.vulnerabilityId}-${updated.assetId}-${updated.cpeName}`, updated)));
+          }}
+        />
+      )}
     </div>
   );
 }

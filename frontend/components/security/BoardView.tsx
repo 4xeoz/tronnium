@@ -12,10 +12,12 @@ import {
   FiCpu,
   FiLayers,
   FiMove,
+  FiFileText,
 } from "react-icons/fi";
 import { getOrCreateWorkflow, getStatusLabel, VULN_STATUSES, type WorkflowItem, type VulnStatus } from "@/lib/api/vulnerabilityWorkflow";
-import { Badge } from "./SecurityUI";
+import { Badge, AgeBadge } from "./SecurityUI";
 import type { AssetScan as AssetScanItem, ScanSeverity } from "@/lib/api";
+import type { SelectedVuln } from "./VulnDetailSlideOver";
 
 // ============================================
 // TYPES
@@ -29,12 +31,18 @@ type VulnerabilityCard = {
   description: string;
   severity: ScanSeverity;
   cvssScore: number | null;
+  cvssVector: string | null;
+  publishedDate: string | null;
+  lastModifiedDate: string | null;
   assetName: string;
   assetType: string;
   cpeName: string;
   workflowId?: string;
   status: VulnStatus;
   isMock?: boolean;
+  assigneeName?: string | null;
+  notes?: string | null;
+  firstSeenAt?: string;
 };
 
 // ============================================
@@ -42,11 +50,11 @@ type VulnerabilityCard = {
 // ============================================
 
 const SEVERITY_CONFIG: Record<ScanSeverity, { bg: string; label: string }> = {
-  CRITICAL: { bg: "bg-red-500", label: "Critical" },
+  CRITICAL: { bg: "bg-red-500",    label: "Critical" },
   HIGH:     { bg: "bg-orange-500", label: "High" },
   MEDIUM:   { bg: "bg-yellow-500", label: "Medium" },
-  LOW:      { bg: "bg-blue-500", label: "Low" },
-  UNKNOWN:  { bg: "bg-gray-500", label: "Unknown" },
+  LOW:      { bg: "bg-blue-500",   label: "Low" },
+  UNKNOWN:  { bg: "bg-gray-500",   label: "Unknown" },
 };
 
 const STATUS_COLORS: Record<VulnStatus, { bg: string; text: string; border: string; dot: string }> = {
@@ -65,6 +73,11 @@ const typeIcons: Record<string, React.ElementType> = {
   unknown:     FiLayers,
 };
 
+function getInitials(name: string | null | undefined) {
+  if (!name) return "?";
+  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+}
+
 // ============================================
 // BOARD CARD
 // ============================================
@@ -75,16 +88,17 @@ function BoardCard({
   onDragStart,
   isDragging,
   isCreatingWorkflow,
+  onVulnClick,
 }: {
   card: VulnerabilityCard;
   onMove: (card: VulnerabilityCard, status: VulnStatus) => void;
   onDragStart: () => void;
   isDragging: boolean;
   isCreatingWorkflow?: boolean;
+  onVulnClick: (card: VulnerabilityCard) => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const config = SEVERITY_CONFIG[card.severity];
   const Icon = typeIcons[card.assetType] || typeIcons.unknown;
 
   const handleMove = (status: VulnStatus) => {
@@ -110,13 +124,19 @@ function BoardCard({
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-mono text-xs font-medium text-text-primary truncate">{card.cveId}</span>
+          {/* CVE ID — click to open detail panel */}
+          <button
+            onClick={() => onVulnClick(card)}
+            className="font-mono text-xs font-medium text-blue-500 hover:text-blue-400 hover:underline truncate text-left"
+          >
+            {card.cveId}
+          </button>
           {card.isMock && <Badge variant="neutral" size="sm">MOCK</Badge>}
           {isCreatingWorkflow && (
             <span className="text-[10px] text-text-muted italic">Creating...</span>
           )}
         </div>
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             onClick={() => setShowMenu(!showMenu)}
             disabled={isUpdating || isCreatingWorkflow}
@@ -129,9 +149,7 @@ function BoardCard({
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
               <div className="absolute right-0 top-full mt-1 w-44 bg-surface rounded-lg border border-border shadow-lg z-50 py-1">
-                <div className="px-3 py-1.5 text-xs font-medium text-text-muted border-b border-border">
-                  Move to...
-                </div>
+                <div className="px-3 py-1.5 text-xs font-medium text-text-muted border-b border-border">Move to...</div>
                 {VULN_STATUSES.map(status => (
                   <button
                     key={status}
@@ -153,30 +171,49 @@ function BoardCard({
       </div>
 
       {/* Description */}
-      <p className="text-xs text-text-secondary line-clamp-2 mb-3">{card.description}</p>
+      <p className="text-xs text-text-secondary line-clamp-2 mb-2">{card.description}</p>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Badge
-            variant={card.severity === "CRITICAL" ? "error" : card.severity === "HIGH" ? "warning" : "info"}
-            size="sm"
-          >
-            {card.severity}
-          </Badge>
-          {card.cvssScore && (
-            <span className="text-xs text-text-muted">{card.cvssScore.toFixed(1)}</span>
-          )}
-        </div>
+      {/* Severity + CVSS */}
+      <div className="flex items-center gap-2 mb-2">
+        <Badge
+          variant={card.severity === "CRITICAL" ? "error" : card.severity === "HIGH" ? "warning" : "info"}
+          size="sm"
+        >
+          {card.severity}
+        </Badge>
+        {card.cvssScore && (
+          <span className="text-xs text-text-muted">{card.cvssScore.toFixed(1)}</span>
+        )}
+        {/* Age badge */}
+        {card.firstSeenAt && (
+          <AgeBadge firstSeenAt={card.firstSeenAt} severity={card.severity} />
+        )}
         {isUpdating && (
-          <div className="w-4 h-4 border-2 border-brand-1 border-t-transparent rounded-full animate-spin" />
+          <div className="w-3.5 h-3.5 border-2 border-brand-1 border-t-transparent rounded-full animate-spin ml-auto" />
         )}
       </div>
 
-      {/* Asset Info */}
-      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border">
-        <Icon className="w-3.5 h-3.5 text-text-muted" />
-        <span className="text-xs text-text-muted truncate">{card.assetName}</span>
+      {/* Asset + Assignee row */}
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Icon className="w-3.5 h-3.5 text-text-muted shrink-0" />
+          <span className="text-xs text-text-muted truncate">{card.assetName}</span>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {card.notes && (
+            <FiFileText className="w-3.5 h-3.5 text-text-muted" title="Has notes" />
+          )}
+          {card.assigneeName ? (
+            <span
+              title={card.assigneeName}
+              className="w-5 h-5 rounded-full bg-brand-1/20 text-brand-1 text-[10px] font-bold flex items-center justify-center"
+            >
+              {getInitials(card.assigneeName)}
+            </span>
+          ) : (
+            <span className="text-[10px] text-text-muted">—</span>
+          )}
+        </div>
       </div>
 
       {/* Quick Actions */}
@@ -187,8 +224,7 @@ function BoardCard({
             disabled={isUpdating || isCreatingWorkflow}
             className="flex-1 px-2 py-1 text-[10px] font-medium bg-success-bg text-success-text rounded hover:bg-success-bg/80 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
           >
-            <FiCheckCircle className="w-3 h-3" />
-            Resolve
+            <FiCheckCircle className="w-3 h-3" /> Resolve
           </button>
         )}
         {card.status !== "IN_PROGRESS" && card.status !== "RESOLVED" && (
@@ -197,8 +233,7 @@ function BoardCard({
             disabled={isUpdating || isCreatingWorkflow}
             className="flex-1 px-2 py-1 text-[10px] font-medium bg-warning-bg text-warning-text rounded hover:bg-warning-bg/80 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
           >
-            <FiActivity className="w-3 h-3" />
-            Start
+            <FiActivity className="w-3 h-3" /> Start
           </button>
         )}
       </div>
@@ -216,12 +251,16 @@ export default function BoardView({
   onStatusChange,
   environmentId,
   onWorkflowCreated,
+  onVulnClick,
+  focusStatus,
 }: {
   assetScans: AssetScanItem[];
   workflows: Map<string, WorkflowItem>;
   onStatusChange: (id: string, status: VulnStatus) => void;
   environmentId: string;
   onWorkflowCreated: (workflow: WorkflowItem) => void;
+  onVulnClick: (vuln: SelectedVuln) => void;
+  focusStatus?: VulnStatus | null;
 }) {
   const [draggedCard, setDraggedCard] = useState<VulnerabilityCard | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<VulnStatus | null>(null);
@@ -234,7 +273,6 @@ export default function BoardView({
       assetScan.vulnerabilities.forEach(vuln => {
         const workflow = workflows.get(`${vuln.vulnerability.id}-${assetScan.asset.id}-${vuln.cpeName}`);
         cards.push({
-          // Use pipe separator to avoid splitting UUID dashes
           id: `${vuln.vulnerability.id}|${assetScan.asset.id}`,
           vulnerabilityId: vuln.vulnerability.id,
           assetId: assetScan.asset.id,
@@ -242,40 +280,44 @@ export default function BoardView({
           description: vuln.vulnerability.description,
           severity: vuln.vulnerability.severity,
           cvssScore: vuln.vulnerability.cvssScore,
+          cvssVector: vuln.vulnerability.cvssVector ?? null,
+          publishedDate: vuln.vulnerability.publishedDate ?? null,
+          lastModifiedDate: vuln.vulnerability.lastModifiedDate ?? null,
           assetName: assetScan.asset.name,
           assetType: assetScan.asset.type,
           cpeName: vuln.cpeName,
           workflowId: workflow?.id,
           status: (workflow?.status || "OPEN") as VulnStatus,
           isMock: vuln.vulnerability.isMock,
+          assigneeName: workflow?.assigneeName,
+          notes: workflow?.notes,
+          firstSeenAt: workflow?.firstSeenAt,
         });
       });
     });
     return cards;
   }, [assetScans, workflows]);
 
-  const columns: { id: VulnStatus; title: string; cards: VulnerabilityCard[] }[] = [
-    { id: "OPEN",           title: "Open",           cards: allCards.filter(c => c.status === "OPEN") },
-    { id: "IN_PROGRESS",    title: "In Progress",    cards: allCards.filter(c => c.status === "IN_PROGRESS") },
-    { id: "RESOLVED",       title: "Resolved",       cards: allCards.filter(c => c.status === "RESOLVED") },
-    { id: "FALSE_POSITIVE", title: "False Positive", cards: allCards.filter(c => c.status === "FALSE_POSITIVE") },
-    { id: "RISK_ACCEPTED",  title: "Risk Accepted",  cards: allCards.filter(c => c.status === "RISK_ACCEPTED") },
+  const allColumns: { id: VulnStatus; title: string }[] = [
+    { id: "OPEN",           title: "Open" },
+    { id: "IN_PROGRESS",    title: "In Progress" },
+    { id: "RESOLVED",       title: "Resolved" },
+    { id: "FALSE_POSITIVE", title: "False Positive" },
+    { id: "RISK_ACCEPTED",  title: "Risk Accepted" },
   ];
+
+  // When focusStatus is set, only show that column
+  const visibleColumns = focusStatus
+    ? allColumns.filter(c => c.id === focusStatus)
+    : allColumns;
 
   const handleMove = async (card: VulnerabilityCard, newStatus: VulnStatus) => {
     if (card.status === newStatus) return;
-
     let workflowId = card.workflowId;
-
     if (!workflowId) {
       setIsCreatingWorkflow(card.id);
       try {
-        const response = await getOrCreateWorkflow(
-          environmentId,
-          card.assetId,
-          card.vulnerabilityId,
-          card.cpeName
-        );
+        const response = await getOrCreateWorkflow(environmentId, card.assetId, card.vulnerabilityId, card.cpeName);
         if (response.data) {
           workflowId = response.data.id;
           onWorkflowCreated(response.data);
@@ -291,7 +333,6 @@ export default function BoardView({
         setIsCreatingWorkflow(null);
       }
     }
-
     onStatusChange(workflowId, newStatus);
   };
 
@@ -303,10 +344,24 @@ export default function BoardView({
   const handleDrop = (e: React.DragEvent, columnId: VulnStatus) => {
     e.preventDefault();
     setDragOverColumn(null);
-    if (draggedCard && draggedCard.status !== columnId) {
-      handleMove(draggedCard, columnId);
-    }
+    if (draggedCard && draggedCard.status !== columnId) handleMove(draggedCard, columnId);
     setDraggedCard(null);
+  };
+
+  const handleVulnClick = (card: VulnerabilityCard) => {
+    onVulnClick({
+      vulnerabilityId: card.vulnerabilityId,
+      assetId: card.assetId,
+      cpeName: card.cpeName,
+      cveId: card.cveId,
+      description: card.description,
+      severity: card.severity,
+      cvssScore: card.cvssScore,
+      cvssVector: card.cvssVector,
+      publishedDate: card.publishedDate,
+      lastModifiedDate: card.lastModifiedDate,
+      assetName: card.assetName,
+    });
   };
 
   return (
@@ -320,52 +375,56 @@ export default function BoardView({
 
       <div className="flex items-center gap-2 text-text-muted text-sm">
         <FiMove className="w-4 h-4" />
-        <span>Drag cards between columns to change status, or use the menu</span>
+        <span>Drag cards between columns · Click CVE ID for details</span>
       </div>
 
       <div className="flex gap-4 overflow-x-auto pb-4">
-        {columns.map(column => (
-          <div
-            key={column.id}
-            className="flex-shrink-0 w-80 flex flex-col max-h-[calc(100vh-360px)]"
-            onDragOver={(e) => handleDragOver(e, column.id)}
-            onDragLeave={() => setDragOverColumn(null)}
-            onDrop={(e) => handleDrop(e, column.id)}
-          >
-            <div className={`flex items-center justify-between p-3 rounded-t-lg border-t border-x transition-colors ${
-              dragOverColumn === column.id
-                ? "bg-brand-1/20 border-brand-1"
-                : `${STATUS_COLORS[column.id].bg} ${STATUS_COLORS[column.id].border}`
-            }`}>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${STATUS_COLORS[column.id].dot}`} />
-                <span className={`font-medium text-sm ${STATUS_COLORS[column.id].text}`}>{column.title}</span>
-              </div>
-              <Badge variant="neutral" size="sm">{column.cards.length}</Badge>
-            </div>
-
-            <div className={`flex-1 overflow-y-auto border-x border-b border-border rounded-b-lg p-2 space-y-2 transition-colors ${
-              dragOverColumn === column.id ? "bg-brand-1/10" : "bg-surface-secondary/50"
-            }`}>
-              {column.cards.length === 0 ? (
-                <div className="text-center py-8 text-text-muted text-sm border-2 border-dashed border-border rounded-lg">
-                  Drop items here
+        {visibleColumns.map(column => {
+          const cards = allCards.filter(c => c.status === column.id);
+          return (
+            <div
+              key={column.id}
+              className="flex-shrink-0 w-80 flex flex-col max-h-[calc(100vh-360px)]"
+              onDragOver={e => handleDragOver(e, column.id)}
+              onDragLeave={() => setDragOverColumn(null)}
+              onDrop={e => handleDrop(e, column.id)}
+            >
+              <div className={`flex items-center justify-between p-3 rounded-t-lg border-t border-x transition-colors ${
+                dragOverColumn === column.id
+                  ? "bg-brand-1/20 border-brand-1"
+                  : `${STATUS_COLORS[column.id].bg} ${STATUS_COLORS[column.id].border}`
+              }`}>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${STATUS_COLORS[column.id].dot}`} />
+                  <span className={`font-medium text-sm ${STATUS_COLORS[column.id].text}`}>{column.title}</span>
                 </div>
-              ) : (
-                column.cards.map(card => (
-                  <BoardCard
-                    key={card.id}
-                    card={card}
-                    onMove={handleMove}
-                    onDragStart={() => setDraggedCard(card)}
-                    isDragging={draggedCard?.id === card.id}
-                    isCreatingWorkflow={isCreatingWorkflow === card.id}
-                  />
-                ))
-              )}
+                <Badge variant="neutral" size="sm">{cards.length}</Badge>
+              </div>
+
+              <div className={`flex-1 overflow-y-auto border-x border-b border-border rounded-b-lg p-2 space-y-2 transition-colors ${
+                dragOverColumn === column.id ? "bg-brand-1/10" : "bg-surface-secondary/50"
+              }`}>
+                {cards.length === 0 ? (
+                  <div className="text-center py-8 text-text-muted text-sm border-2 border-dashed border-border rounded-lg">
+                    Drop items here
+                  </div>
+                ) : (
+                  cards.map(card => (
+                    <BoardCard
+                      key={card.id}
+                      card={card}
+                      onMove={handleMove}
+                      onDragStart={() => setDraggedCard(card)}
+                      isDragging={draggedCard?.id === card.id}
+                      isCreatingWorkflow={isCreatingWorkflow === card.id}
+                      onVulnClick={handleVulnClick}
+                    />
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

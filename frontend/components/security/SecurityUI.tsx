@@ -6,6 +6,7 @@ import {
   FiTrendingDown,
   FiMinimize,
 } from "react-icons/fi";
+import { getDaysOpen, getSlaStatus, formatAge, SLA_COLORS } from "@/lib/vulnAge";
 
 // ============================================
 // CARD
@@ -135,5 +136,30 @@ export function StatCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+// ============================================
+// AGE BADGE
+// ============================================
+
+export function AgeBadge({
+  firstSeenAt,
+  severity,
+}: {
+  firstSeenAt: string | undefined | null;
+  severity: string;
+}) {
+  if (!firstSeenAt) return null;
+  const days = getDaysOpen(firstSeenAt);
+  const sla = getSlaStatus(days, severity);
+  const colors = SLA_COLORS[sla];
+  return (
+    <span
+      title={`Open for ${days} day${days !== 1 ? "s" : ""} · SLA: ${sla}`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`}
+    >
+      {formatAge(days)}
+    </span>
   );
 }
