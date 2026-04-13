@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { explainCve } from "../services/cveExplain.service";
+import { analyzeSocContext, explainCve } from "../services/cveExplain.service";
 
 /**
  * POST /ai/explain-cve
@@ -44,4 +44,43 @@ export async function explainCveHandler(req: Request, res: Response): Promise<vo
 			error: "Failed to generate explanation. Please try again.",
 		});
 	}
+}
+
+
+
+export async function socAnalysisHandler(req: Request, res: Response): Promise<void> {
+   const { cveId, description, cvssScore, severity, cvssVector, assetName, assetType, cpeName } = req.body;
+
+  // Required fields
+  if (!cveId || !description || !assetName || !assetType || !cpeName) {
+    res.status(400).json({
+      success: false,
+      error: "cveId, description, assetName, assetType, and cpeName are required",
+    });
+    return;
+  }
+
+
+  try {
+	const analysis = await analyzeSocContext({
+	  cveId, description,
+      cvssScore: cvssScore ?? null,
+      severity: severity || "UNKNOWN",
+      cvssVector: cvssVector ?? null,
+      assetName, assetType, cpeName,
+	});
+
+	res.json({
+		success: true,
+		data: analysis,
+	});
+  }
+  catch (error) {
+	console.error("Error generating SOC analysis:", error);
+	res.status(500).json({
+		success: false,
+		error: "Failed to generate SOC analysis. Please try again.",
+	});
+  }
+
 }
