@@ -4,13 +4,15 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   FiX,
   FiExternalLink,
-  FiZap,
+  FiShield,
   FiUser,
   FiCalendar,
   FiFileText,
   FiClock,
   FiCheckCircle,
   FiAlertCircle,
+  FiAlertTriangle,
+  FiZap,
 } from "react-icons/fi";
 import {
   updateWorkflow,
@@ -20,7 +22,7 @@ import {
   type WorkflowItem,
   type VulnStatus,
 } from "@/lib/api/vulnerabilityWorkflow";
-import { explainCve, type CveExplanation, type ScanSeverity } from "@/lib/api";
+import { requestSocAnalysis, type SocAnalysis, type ScanSeverity } from "@/lib/api";
 import { useUser } from "@/lib/UserContext";
 import { AgeBadge } from "./SecurityUI";
 import { getDaysOpen } from "@/lib/vulnAge";
@@ -74,44 +76,75 @@ function getInitials(name: string | null | undefined) {
 }
 
 // ============================================
-// AI EXPLAIN INLINE SECTION
+// URGENCY BADGE
 // ============================================
 
-function AIExplainSection({ vuln }: { vuln: SelectedVuln }) {
-  const [explanation, setExplanation] = useState<CveExplanation | null>(null);
+const URGENCY_STYLES: Record<SocAnalysis["urgencyLevel"], string> = {
+  IMMEDIATE: "bg-red-500/15 text-red-400 border-red-500/30",
+  HIGH:      "bg-orange-500/15 text-orange-400 border-orange-500/30",
+  MEDIUM:    "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+  LOW:       "bg-blue-500/15 text-blue-400 border-blue-500/30",
+};
+
+function UrgencyBadge({ level }: { level: SocAnalysis["urgencyLevel"] }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border ${URGENCY_STYLES[level]}`}>
+      <FiAlertTriangle className="w-3 h-3" />
+      {level}
+    </span>
+  );
+}
+
+// ============================================
+// AI SOC ANALYST SECTION
+// ============================================
+
+function SOCAnalystSection({
+  vuln,
+  assetType,
+}: {
+  vuln: SelectedVuln;
+  assetType: string;
+}) {
+  const [analysis, setAnalysis] = useState<SocAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetch = useCallback(async () => {
+  const runAnalysis = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await explainCve({
+      const res = await requestSocAnalysis({
         cveId: vuln.cveId,
         description: vuln.description,
-        cvssScore: vuln.cvssScore,
         severity: vuln.severity,
+        cvssScore: vuln.cvssScore,
+        cvssVector: vuln.cvssVector,
+        assetName: vuln.assetName,
+        assetType,
+        cpeName: vuln.cpeName,
       });
       if (res.success && res.data) {
-        setExplanation(res.data);
+        setAnalysis(res.data);
       } else {
-        setError(res.error || "Failed to generate explanation");
+        setError(res.error || "Failed to generate analysis");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
+      setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
       setIsLoading(false);
     }
-  }, [vuln.cveId, vuln.description, vuln.cvssScore, vuln.severity]);
+  }, [vuln, assetType]);
 
-  if (!explanation && !isLoading && !error) {
+  // Trigger button — shown before analysis is loaded
+  if (!analysis && !isLoading && !error) {
     return (
       <button
-        onClick={fetch}
+        onClick={runAnalysis}
         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 hover:border-indigo-500/50 rounded-lg transition-all"
       >
-        <FiZap className="w-3.5 h-3.5" />
-        Generate AI Explanation
+        <FiShield className="w-3.5 h-3.5" />
+        Run SOC Analysis
       </button>
     );
   }
@@ -119,8 +152,8 @@ function AIExplainSection({ vuln }: { vuln: SelectedVuln }) {
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 text-text-muted text-sm">
-        <div className="w-4 h-4 border-2 border-text-muted border-t-transparent rounded-full animate-spin" />
-        Generating explanation...
+        <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+        Analyzing system context...
       </div>
     );
   }
@@ -128,35 +161,62 @@ function AIExplainSection({ vuln }: { vuln: SelectedVuln }) {
   if (error) {
     return (
       <div className="flex items-center gap-2 text-error-text text-sm">
-        <FiAlertCircle className="w-4 h-4" />
-        {error}
-        <button onClick={fetch} className="underline ml-1">Retry</button>
+        <FiAlertCircle className="w-4 h-4 shrink-0" />
+        <span>{error}</span>
+        <button onClick={runAnalysis} className="underline ml-1 shrink-0">Retry</button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      <div>
-        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">Summary</h4>
-        <p className="text-sm text-text-secondary leading-relaxed">{explanation!.summary}</p>
+    <div className="space-y-4">
+      {/* Urgency + model */}
+      <div className="flex items-center justify-between">
+        <UrgencyBadge level={analysis!.urgencyLevel} />
+        {analysis!.model !== "stub" && (
+          <span className="text-xs text-text-muted">Powered by {analysis!.model}</span>
+        )}
       </div>
+
+      {/* System Impact */}
       <div>
-        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">Business Impact</h4>
-        <p className="text-sm text-text-secondary leading-relaxed">{explanation!.impact}</p>
+        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">
+          System Impact
+        </h4>
+        <p className="text-sm text-text-secondary leading-relaxed">{analysis!.systemImpact}</p>
       </div>
+
+      {/* Attack Scenario */}
       <div>
-        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">Remediation Steps</h4>
+        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">
+          Attack Scenario
+        </h4>
+        <p className="text-sm text-text-secondary leading-relaxed">{analysis!.attackScenario}</p>
+      </div>
+
+      {/* Remediation Steps */}
+      <div>
+        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">
+          Remediation Steps
+        </h4>
         <ol className="space-y-1.5">
-          {explanation!.remediationSteps.map((step, i) => (
+          {analysis!.remediationSteps.map((step, i) => (
             <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
-              <span className="w-5 h-5 rounded-full bg-brand-1/10 text-brand-1 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+              <span className="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
                 {i + 1}
               </span>
               {step}
             </li>
           ))}
         </ol>
+      </div>
+
+      {/* Industry Guidance */}
+      <div>
+        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">
+          Industry Guidance
+        </h4>
+        <p className="text-sm text-text-secondary leading-relaxed">{analysis!.industryGuidance}</p>
       </div>
     </div>
   );
@@ -490,12 +550,15 @@ export default function VulnDetailSlideOver({
 
           <div className="border-t border-border" />
 
-          {/* AI Explanation */}
+          {/* AI SOC Analyst */}
           <section>
             <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3 flex items-center gap-1">
-              <FiZap className="w-3.5 h-3.5 text-indigo-400" /> AI Explanation
+              <FiShield className="w-3.5 h-3.5 text-indigo-400" /> AI SOC Analyst
             </h3>
-            <AIExplainSection vuln={vuln} />
+            <SOCAnalystSection
+              vuln={vuln}
+              assetType={workflow?.assetType ?? "unknown"}
+            />
           </section>
 
           {/* Bottom padding */}

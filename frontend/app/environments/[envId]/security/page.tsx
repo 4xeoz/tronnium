@@ -20,7 +20,16 @@ import {
   FiLayout,
   FiClock,
   FiX,
+  FiShield,
+  FiAlertTriangle,
+  FiZap,
+  FiChevronRight,
 } from "react-icons/fi";
+import {
+  requestEnvironmentBriefing,
+  type EnvironmentBriefing,
+  type CriticalFinding,
+} from "@/lib/api/ai";
 import {
   getLatestScan,
   getScanHistory,
@@ -739,6 +748,210 @@ function ScanHistorySlideOver({
 }
 
 // ============================================
+// AI ENVIRONMENT BRIEFING PANEL
+// ============================================
+
+const RISK_STYLES: Record<EnvironmentBriefing["overallRisk"], { border: string; bg: string; text: string; badge: string }> = {
+  CRITICAL: { border: "border-red-500/40",   bg: "bg-red-500/5",    text: "text-red-400",    badge: "bg-red-500/15 text-red-400 border-red-500/30" },
+  HIGH:     { border: "border-orange-500/40", bg: "bg-orange-500/5", text: "text-orange-400", badge: "bg-orange-500/15 text-orange-400 border-orange-500/30" },
+  MEDIUM:   { border: "border-yellow-500/40", bg: "bg-yellow-500/5", text: "text-yellow-400", badge: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30" },
+  LOW:      { border: "border-green-500/40",  bg: "bg-green-500/5",  text: "text-green-400",  badge: "bg-green-500/15 text-green-400 border-green-500/30" },
+};
+
+const URGENCY_DOT: Record<CriticalFinding["urgency"], string> = {
+  IMMEDIATE: "bg-red-500",
+  HIGH:      "bg-orange-500",
+  MEDIUM:    "bg-yellow-500",
+  LOW:       "bg-blue-500",
+};
+
+function EnvironmentBriefingPanel({
+  briefing,
+  isLoading,
+  error,
+  onRun,
+}: {
+  briefing: EnvironmentBriefing | null;
+  isLoading: boolean;
+  error: string | null;
+  onRun: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Show the trigger card when there's no briefing yet
+  if (!briefing && !isLoading && !error) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+            <FiShield className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-text-primary">AI Environment Briefing</p>
+            <p className="text-xs text-text-muted">Analyze all assets and CVEs together for a holistic threat assessment</p>
+          </div>
+        </div>
+        <button
+          onClick={onRun}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 hover:border-indigo-500/50 rounded-lg transition-all shrink-0"
+        >
+          <FiZap className="w-3.5 h-3.5" />
+          Generate Briefing
+        </button>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-3">
+        <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0" />
+        <p className="text-sm text-text-muted">Analyzing all assets and vulnerabilities...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-error-bg border border-error-border rounded-xl p-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-error-text text-sm">
+          <FiAlertTriangle className="w-4 h-4 shrink-0" />
+          {error}
+        </div>
+        <button onClick={onRun} className="text-xs text-error-text underline shrink-0">Retry</button>
+      </div>
+    );
+  }
+
+  if (!briefing) return null;
+
+  const riskStyle = RISK_STYLES[briefing.overallRisk];
+
+  return (
+    <div className={`bg-surface border rounded-xl overflow-hidden ${riskStyle.border}`}>
+      {/* Header row — always visible */}
+      <button
+        onClick={() => setExpanded(prev => !prev)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-secondary/50 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3">
+          <div className={`w-8 h-8 rounded-lg ${riskStyle.bg} flex items-center justify-center`}>
+            <FiShield className={`w-4 h-4 ${riskStyle.text}`} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-text-primary flex items-center gap-2">
+              AI SOC Briefing
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${riskStyle.badge}`}>
+                {briefing.overallRisk} RISK
+              </span>
+            </p>
+            <p className="text-xs text-text-muted mt-0.5 line-clamp-1">{briefing.threatSummary}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); onRun(); }}
+            className="text-xs text-indigo-400 hover:text-indigo-300 px-2 py-1 rounded hover:bg-indigo-500/10 transition-colors"
+          >
+            Refresh
+          </button>
+          {expanded ? <FiChevronDown className="w-4 h-4 text-text-muted" /> : <FiChevronRight className="w-4 h-4 text-text-muted" />}
+        </div>
+      </button>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div className="px-5 pb-5 space-y-5 border-t border-border">
+          {/* Threat Summary */}
+          <div className="pt-4">
+            <p className="text-sm text-text-secondary leading-relaxed">{briefing.threatSummary}</p>
+          </div>
+
+          {/* Critical Findings */}
+          {briefing.criticalFindings.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">
+                Critical Findings
+              </h4>
+              <div className="space-y-3">
+                {briefing.criticalFindings.map((finding, i) => (
+                  <div key={i} className="bg-surface-secondary rounded-lg p-3 border border-border">
+                    <div className="flex items-start gap-2 mb-1.5">
+                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${URGENCY_DOT[finding.urgency]}`} />
+                      <p className="text-sm font-medium text-text-primary">{finding.title}</p>
+                    </div>
+                    <p className="text-xs text-text-secondary leading-relaxed ml-4 mb-2">{finding.description}</p>
+                    <div className="ml-4 flex flex-wrap gap-2 items-center">
+                      <div className="flex flex-wrap gap-1">
+                        {finding.affectedAssets.map((asset) => (
+                          <span key={asset} className="text-xs bg-surface border border-border text-text-muted px-1.5 py-0.5 rounded">
+                            {asset}
+                          </span>
+                        ))}
+                      </div>
+                      <span className="text-xs text-indigo-400 font-medium">→ {finding.recommendedAction}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Systemic Risks */}
+          {briefing.systemicRisks.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
+                Systemic Risks
+              </h4>
+              <ul className="space-y-1.5">
+                {briefing.systemicRisks.map((risk, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                    <FiAlertTriangle className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
+                    {risk}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Prioritized Actions */}
+          {briefing.prioritizedActions.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
+                Prioritized Actions
+              </h4>
+              <ol className="space-y-1.5">
+                {briefing.prioritizedActions.map((action, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                    <span className="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                      {i + 1}
+                    </span>
+                    {action}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {/* Industry Guidance */}
+          <div>
+            <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
+              Industry Guidance
+            </h4>
+            <p className="text-sm text-text-secondary leading-relaxed">{briefing.industryGuidance}</p>
+          </div>
+
+          {/* Footer */}
+          {briefing.model !== "stub" && (
+            <p className="text-xs text-text-muted">Powered by {briefing.model}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // MAIN PAGE
 // ============================================
 
@@ -765,6 +978,28 @@ export default function SecurityPage() {
   const [selectedScanId, setSelectedScanId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // AI Environment Briefing state
+  const [briefing, setBriefing] = useState<EnvironmentBriefing | null>(null);
+  const [isBriefingLoading, setIsBriefingLoading] = useState(false);
+  const [briefingError, setBriefingError] = useState<string | null>(null);
+
+  const runEnvironmentBriefing = useCallback(async () => {
+    setIsBriefingLoading(true);
+    setBriefingError(null);
+    try {
+      const res = await requestEnvironmentBriefing(envId);
+      if (res.success && res.data) {
+        setBriefing(res.data);
+      } else {
+        setBriefingError(res.error || "Failed to generate briefing");
+      }
+    } catch (e) {
+      setBriefingError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setIsBriefingLoading(false);
+    }
+  }, [envId]);
 
   const isScanningThisEnv = isScanning && scanningEnvId === envId;
 
@@ -921,6 +1156,16 @@ export default function SecurityPage() {
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {isScanningThisEnv && <ScanningProgress progress={progress} />}
+
+        {/* AI Environment Briefing */}
+        {latestScan && (
+          <EnvironmentBriefingPanel
+            briefing={briefing}
+            isLoading={isBriefingLoading}
+            error={briefingError}
+            onRun={runEnvironmentBriefing}
+          />
+        )}
 
         {/* View Tabs */}
         {latestScan && (
