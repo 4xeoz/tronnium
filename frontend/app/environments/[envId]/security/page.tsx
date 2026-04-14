@@ -24,6 +24,7 @@ import {
   getLatestScan,
   getScanHistory,
   getScanById,
+  deleteScan,
   useScan,
   type LatestScan,
   type ScanHistoryItem,
@@ -522,6 +523,30 @@ export default function SecurityPage() {
     }
   }, [envId, latestScan]);
 
+  // Delete a historical scan; handles all state transitions correctly
+  const handleDeleteScan = useCallback(async (scanId: string) => {
+    await deleteScan(envId, scanId); // throws on API error — dropdown keeps spinner
+
+    // Evict from local cache immediately
+    scanCache.current.delete(scanId);
+
+    // Remove from history list
+    setScanHistory((prev) => prev.filter((s) => s.id !== scanId));
+
+    const deletedIsDisplayed = displayedScan?.id === scanId;
+    const deletedIsLatest    = latestScan?.id    === scanId;
+
+    if (deletedIsLatest) {
+      // Latest scan gone — need a full reload to determine the new latest
+      setLatestScan(null);
+      setDisplayedScan(null);
+      loadData();
+    } else if (deletedIsDisplayed) {
+      // Was viewing a historical scan that got deleted → revert to latest
+      setDisplayedScan(latestScan);
+    }
+  }, [envId, displayedScan, latestScan, loadData]);
+
   const handleStatusChange = async (workflowId: string, newStatus: VulnStatus) => {
     try {
       const response = await updateWorkflow(workflowId, { status: newStatus });
@@ -620,6 +645,7 @@ export default function SecurityPage() {
                   selectedScanId={selectedHistoryScanId}
                   onSelectScan={handleScanSelect}
                   isLoadingScan={isLoadingHistoryScan}
+                  onDeleteScan={handleDeleteScan}
                 />
               )}
               {/* Gear button — opens scan configuration modal */}

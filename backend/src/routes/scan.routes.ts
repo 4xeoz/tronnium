@@ -6,6 +6,7 @@ import {
   getScanHistoryHandler,
   getScanSettingsHandler,
   getScanByIdHandler,
+  deleteScanHandler,
 } from "../controllers/scan.controller";
 
 const scanRouter = Router();
@@ -45,5 +46,12 @@ scanRouter.get("/:environmentId/settings", getScanSettingsHandler);
  * Get a single scan by ID with full details
  */
 scanRouter.get("/:environmentId/:scanId", getScanByIdHandler);
+
+/**
+ * DELETE /scans/:environmentId/:scanId
+ * Permanently delete a scan and all associated asset scans / vulnerabilities.
+ * Returns 409 if the scan is currently IN_PROGRESS.
+ */
+scanRouter.delete("/:environmentId/:scanId", deleteScanHandler);
 
 export default scanRouter;

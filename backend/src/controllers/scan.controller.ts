@@ -318,3 +318,60 @@ export async function getScanByIdHandler(req: Request, res: Response): Promise<v
     });
   }
 }
+
+/**
+ * Delete a scan by ID
+ * DELETE /scans/:environmentId/:scanId
+ *
+ * Cascades: SecurityScan → AssetScan → AssetVulnerability (via DB cascade rules).
+ * VulnerabilityWorkflow records are NOT deleted (they track remediation state
+ * independently of individual scan runs).
+ * Disallows deletion of scans that are currently IN_PROGRESS.
+ */
+export async function deleteScanHandler(req: Request, res: Response): Promise<void> {
+  const { environmentId, scanId } = req.params;
+  const userId = req.user?.id;
+
+  if (!environmentId || !scanId || !userId) {
+    res.status(400).json({ success: false, error: "Missing required parameters" });
+    return;
+  }
+
+  try {
+    // Verify the user owns this environment
+    const environment = await prisma.environment.findFirst({
+      where: { id: environmentId, ownerId: userId },
+    });
+    if (!environment) {
+      res.status(404).json({ success: false, error: "Environment not found" });
+      return;
+    }
+
+    // Confirm the scan belongs to this environment and check its status
+    const scan = await prisma.securityScan.findFirst({
+      where: { id: scanId, environmentId },
+      select: { id: true, status: true },
+    });
+    if (!scan) {
+      res.status(404).json({ success: false, error: "Scan not found" });
+      return;
+    }
+
+    // Prevent deletion of a currently-running scan
+    if (scan.status === "IN_PROGRESS") {
+      res.status(409).json({
+        success: false,
+        error: "Cannot delete a scan that is currently in progress",
+      });
+      return;
+    }
+
+    // Delete — DB cascade handles AssetScan and AssetVulnerability rows
+    await prisma.securityScan.delete({ where: { id: scanId } });
+
+    res.json({ success: true, message: "Scan deleted successfully" });
+  } catch (error) {
+    console.error("[Scan] deleteScan error:", error);
+    res.status(500).json({ success: false, error: "Failed to delete scan" });
+  }
+}

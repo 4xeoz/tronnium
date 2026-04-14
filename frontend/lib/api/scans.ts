@@ -202,6 +202,17 @@ export async function getScanById(
 }
 
 /**
+ * Permanently delete a scan and all associated data.
+ * Returns an error if the scan is currently IN_PROGRESS.
+ */
+export async function deleteScan(
+  environmentId: string,
+  scanId: string
+): Promise<ApiResponse<null>> {
+  return apiFetch<null>(`/scans/${environmentId}/${scanId}`, { method: "DELETE" });
+}
+
+/**
  * Calculate risk level from score
  */
 export function getRiskLevel(score: number | null | undefined): {
