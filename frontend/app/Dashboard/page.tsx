@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback, ReactNode } from "react";
-import { FiPlus, FiBox, FiTrash2, FiShield, FiAlertTriangle, FiActivity, FiServer } from "react-icons/fi";
+import {
+  FiPlus, FiBox, FiTrash2, FiShield, FiAlertTriangle, FiActivity, FiServer,
+  FiClock, FiSettings, FiCheckCircle, FiXCircle, FiRefreshCw, FiX,
+} from "react-icons/fi";
 import { getEnvironments, deleteEnvironment, type Environment } from "@/lib/api";
 import CreateEnvironmentSlideOver from "@/components/environments/CreateEnvironmentSlideOver";
 
@@ -108,6 +111,241 @@ function EnvironmentCard({ env, onDelete, isDeleting }: {
   );
 }
 
+// ============== Auto Scanner ==============
+
+const DUMMY_RUN_HISTORY = [
+  { id: 1, hoursAgo: 8,  duration: "2m 34s", status: "COMPLETED" as const, vulnsFound: 3 },
+  { id: 2, hoursAgo: 32, duration: "2m 18s", status: "COMPLETED" as const, vulnsFound: 3 },
+  { id: 3, hoursAgo: 56, duration: "45s",    status: "FAILED"    as const, vulnsFound: 0 },
+  { id: 4, hoursAgo: 80, duration: "2m 51s", status: "COMPLETED" as const, vulnsFound: 5 },
+];
+
+function AutoScannerConfigSlideOver({ onClose }: { onClose: () => void }) {
+  const [frequency, setFrequency] = useState("24");
+  const [timeOfDay, setTimeOfDay] = useState("02:00");
+  const [scope, setScope] = useState("all");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = () => {
+    setIsSaving(true);
+    setTimeout(() => { setIsSaving(false); onClose(); }, 900);
+  };
+
+  const SCOPE_OPTIONS = [
+    { value: "all",        label: "All environments" },
+    { value: "production", label: "Production only" },
+    { value: "staging",    label: "Staging only" },
+  ];
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/45 z-40" onClick={onClose} />
+      <aside className="fixed top-0 right-0 h-full w-[480px] bg-surface border-l border-border shadow-2xl z-50 flex flex-col">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-text-primary">Auto Scan Configuration</h3>
+            <p className="text-sm text-text-muted mt-0.5">Scheduled scanning engine settings</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors"
+          >
+            <FiX className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+          {/* Frequency */}
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-2">Scan Frequency</label>
+            <select
+              value={frequency}
+              onChange={e => setFrequency(e.target.value)}
+              className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-1/20 focus:border-brand-1 transition-all"
+            >
+              <option value="6">Every 6 hours</option>
+              <option value="12">Every 12 hours</option>
+              <option value="24">Every 24 hours (Daily)</option>
+              <option value="48">Every 48 hours</option>
+              <option value="168">Every 7 days (Weekly)</option>
+            </select>
+          </div>
+
+          {/* Time of day */}
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-2">Start Time (UTC)</label>
+            <input
+              type="time"
+              value={timeOfDay}
+              onChange={e => setTimeOfDay(e.target.value)}
+              className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-1/20 focus:border-brand-1 transition-all"
+            />
+            <p className="text-xs text-text-muted mt-1.5">Scans will be triggered at this time in UTC.</p>
+          </div>
+
+          {/* Environment scope */}
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-2">Environment Scope</label>
+            <div className="space-y-2">
+              {SCOPE_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setScope(opt.value)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-colors ${
+                    scope === opt.value
+                      ? "border-brand-1/40 bg-brand-1/5"
+                      : "border-border hover:border-border-secondary"
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                    scope === opt.value ? "border-brand-1" : "border-border"
+                  }`}>
+                    {scope === opt.value && (
+                      <div className="w-2 h-2 rounded-full bg-brand-1" />
+                    )}
+                  </div>
+                  <span className="text-sm text-text-primary">{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Info note */}
+          <div className="bg-info-bg border border-info-border rounded-lg px-4 py-3">
+            <p className="text-xs text-info-text leading-relaxed">
+              Configuration changes take effect at the next scheduled run. Any scan currently in progress will complete normally.
+            </p>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-border flex gap-3">
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex-1 py-2 bg-text-primary text-surface rounded-lg text-sm font-medium hover:bg-text-primary/90 disabled:opacity-60 transition-colors inline-flex items-center justify-center gap-2"
+          >
+            {isSaving ? (
+              <>
+                <div className="w-4 h-4 border-2 border-surface border-t-transparent rounded-full animate-spin" />
+                Saving...
+              </>
+            ) : "Save Configuration"}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-border rounded-lg text-sm text-text-secondary hover:text-text-primary hover:border-border-secondary transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function AutoScannerCard() {
+  const [enabled, setEnabled] = useState(true);
+  const [showConfig, setShowConfig] = useState(false);
+
+  const frequency = 24; // hours (dummy)
+  const lastRunHoursAgo = DUMMY_RUN_HISTORY[0].hoursAgo;
+  const nextRunHoursFromNow = frequency - (lastRunHoursAgo % frequency);
+
+  return (
+    <section>
+      <SectionHeader
+        title="Auto Scan Engine"
+        action={
+          <button
+            onClick={() => setShowConfig(true)}
+            className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-sm text-text-secondary hover:text-text-primary hover:border-border-secondary transition-colors"
+          >
+            <FiSettings className="w-4 h-4" />
+            Configure
+          </button>
+        }
+      />
+
+      <div className="bg-surface rounded-xl border border-border overflow-hidden">
+        {/* Status bar */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+              enabled ? "bg-emerald-400 animate-pulse" : "bg-gray-400"
+            }`} />
+            <span className="font-medium text-text-primary text-sm">
+              {enabled ? "Engine Active" : "Engine Paused"}
+            </span>
+            <span className="text-text-muted text-sm hidden sm:inline">
+              · Every {frequency} hours · 02:00 UTC
+            </span>
+          </div>
+
+          {/* Toggle switch */}
+          <button
+            onClick={() => setEnabled(prev => !prev)}
+            title={enabled ? "Pause auto-scanner" : "Enable auto-scanner"}
+            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+              enabled ? "bg-emerald-500" : "bg-surface-secondary border border-border"
+            }`}
+          >
+            <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
+              enabled ? "translate-x-5" : "translate-x-0.5"
+            }`} />
+          </button>
+        </div>
+
+        {/* Stats row */}
+        <div className="grid grid-cols-3 divide-x divide-border border-b border-border">
+          <div className="px-5 py-3">
+            <p className="text-xs text-text-muted mb-0.5">Last Run</p>
+            <p className="text-sm font-medium text-text-primary">{lastRunHoursAgo}h ago</p>
+          </div>
+          <div className="px-5 py-3">
+            <p className="text-xs text-text-muted mb-0.5">Next Run</p>
+            <p className={`text-sm font-medium ${enabled ? "text-text-primary" : "text-text-muted"}`}>
+              {enabled ? `in ${nextRunHoursFromNow}h` : "Paused"}
+            </p>
+          </div>
+          <div className="px-5 py-3">
+            <p className="text-xs text-text-muted mb-0.5">Coverage</p>
+            <p className="text-sm font-medium text-text-primary">All environments</p>
+          </div>
+        </div>
+
+        {/* Recent runs */}
+        <div>
+          <div className="px-5 py-2.5 bg-surface-secondary/30">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">Recent Runs</p>
+          </div>
+          <div className="divide-y divide-border">
+            {DUMMY_RUN_HISTORY.map(run => (
+              <div key={run.id} className="flex items-center justify-between px-5 py-3 text-sm">
+                <div className="flex items-center gap-2.5">
+                  {run.status === "COMPLETED" ? (
+                    <FiCheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <FiXCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  )}
+                  <span className="text-text-secondary">{run.hoursAgo}h ago</span>
+                  <span className="text-text-muted text-xs">· {run.duration}</span>
+                </div>
+                <span className={`text-xs font-medium ${
+                  run.vulnsFound > 0 ? "text-orange-400" : "text-text-muted"
+                }`}>
+                  {run.vulnsFound > 0 ? `${run.vulnsFound} vulns found` : "No new vulns"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {showConfig && <AutoScannerConfigSlideOver onClose={() => setShowConfig(false)} />}
+    </section>
+  );
+}
+
 // ============== Main Dashboard ==============
 
 export default function DashboardPage() {
@@ -184,6 +422,9 @@ export default function DashboardPage() {
           />
         </div>
       </section>
+
+      {/* Auto Scan Engine */}
+      <AutoScannerCard />
 
       {/* Environments Section */}
       <section>

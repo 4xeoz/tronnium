@@ -18,6 +18,7 @@ import {
   FiHardDrive,
   FiCpu,
   FiLayout,
+  FiSettings,
 } from "react-icons/fi";
 import {
   getLatestScan,
@@ -419,7 +420,8 @@ export default function SecurityPage() {
     progress,
     scanResult: contextScanResult,
     environmentId: scanningEnvId,
-    configureAndStartScan: contextStartScan,
+    startScan: runScanDirectly,
+    configureAndStartScan: openScanConfig,
   } = useScan();
 
   // Core scan data
@@ -620,8 +622,18 @@ export default function SecurityPage() {
                   isLoadingScan={isLoadingHistoryScan}
                 />
               )}
+              {/* Gear button — opens scan configuration modal */}
               <button
-                onClick={() => contextStartScan(envId)}
+                onClick={() => openScanConfig(envId)}
+                disabled={isScanningThisEnv}
+                title="Configure scan settings"
+                className="p-2 border border-border rounded-lg text-text-muted hover:text-text-primary hover:border-border-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <FiSettings className="w-4 h-4" />
+              </button>
+              {/* Run Scan — starts immediately with default configuration */}
+              <button
+                onClick={() => runScanDirectly(envId)}
                 disabled={isScanningThisEnv}
                 className="px-4 py-2 bg-text-primary text-surface rounded-lg font-medium hover:bg-text-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-2"
               >
@@ -800,7 +812,7 @@ export default function SecurityPage() {
             )}
           </div>
         ) : (
-          <EmptyState onScan={() => contextStartScan(envId)} />
+          <EmptyState onScan={() => runScanDirectly(envId)} />
         )}
       </div>
 
