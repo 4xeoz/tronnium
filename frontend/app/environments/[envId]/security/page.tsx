@@ -631,9 +631,9 @@ export default function SecurityPage() {
               >
                 <FiSettings className="w-4 h-4" />
               </button>
-              {/* Run Scan — starts immediately with default configuration */}
+              {/* Run Scan — starts immediately, incremental by default (since last scan) */}
               <button
-                onClick={() => runScanDirectly(envId)}
+                onClick={() => runScanDirectly(envId, "last-scan")}
                 disabled={isScanningThisEnv}
                 className="px-4 py-2 bg-text-primary text-surface rounded-lg font-medium hover:bg-text-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-2"
               >
@@ -812,7 +812,7 @@ export default function SecurityPage() {
             )}
           </div>
         ) : (
-          <EmptyState onScan={() => runScanDirectly(envId)} />
+          <EmptyState onScan={() => runScanDirectly(envId, "last-scan")} />
         )}
       </div>
 

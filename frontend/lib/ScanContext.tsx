@@ -88,8 +88,9 @@ export function ScanProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const closeConfigModal = useCallback(() => {
+    // Hide first (triggers slide-out animation), then unmount after transition completes
     setShowConfigModal(false);
-    setPendingEnvId(null);
+    setTimeout(() => setPendingEnvId(null), 300);
   }, []);
 
   const clearResult = useCallback(() => {
@@ -120,7 +121,8 @@ export function ScanProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-      {showConfigModal && pendingEnvId && (
+      {/* Keep mounted while pendingEnvId exists so the slide-out animation can play */}
+      {pendingEnvId && (
         <ScanSettingsModal
           environmentId={pendingEnvId}
           isOpen={showConfigModal}
