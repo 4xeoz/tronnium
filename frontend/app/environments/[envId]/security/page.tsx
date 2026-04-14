@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import {
   FiPlay,
@@ -18,18 +18,7 @@ import {
   FiHardDrive,
   FiCpu,
   FiLayout,
-  FiClock,
-  FiX,
-  FiShield,
-  FiAlertTriangle,
-  FiZap,
-  FiChevronRight,
 } from "react-icons/fi";
-import {
-  requestEnvironmentBriefing,
-  type EnvironmentBriefing,
-  type CriticalFinding,
-} from "@/lib/api/ai";
 import {
   getLatestScan,
   getScanHistory,
@@ -53,13 +42,15 @@ import { Card, Badge, AgeBadge } from "@/components/security/SecurityUI";
 import BoardView from "@/components/security/BoardView";
 import OverviewPanel from "@/components/security/OverviewPanel";
 import VulnDetailSlideOver, { type SelectedVuln } from "@/components/security/VulnDetailSlideOver";
+import ScanHistoryDropdown from "@/components/security/ScanHistoryDropdown";
+import AIChatPanel from "@/components/security/AIChatPanel";
 import type { AssetScan as AssetScanItem, ScanSeverity } from "@/lib/api";
 
 // ============================================
 // CONFIG
 // ============================================
 
-type ViewMode = "board" | "assets" | "list" | "overview" | "history";
+type ViewMode = "board" | "assets" | "list" | "overview";
 
 const SEVERITY_CONFIG = {
   CRITICAL: { bg: "bg-red-500",    bgLight: "bg-error-bg",    border: "border-error-border",   text: "text-error-text",   label: "Critical" },
@@ -415,542 +406,6 @@ function formatScanDuration(startedAt: string, completedAt: string | null) {
   return `${hours}h ${remMins}m`;
 }
 
-function ScanHistoryView({
-  scanHistory,
-  onOpenScan,
-}: {
-  scanHistory: ScanHistoryItem[];
-  onOpenScan: (scanId: string) => void;
-}) {
-  if (scanHistory.length === 0) {
-    return (
-      <Card className="p-10 text-center">
-        <FiClock className="w-10 h-10 text-text-muted mx-auto mb-3" />
-        <h3 className="text-text-primary font-semibold mb-1">No Scan History Yet</h3>
-        <p className="text-sm text-text-secondary">Run your first scan to start building history.</p>
-      </Card>
-    );
-  }
-
-  return (
-    <Card padding="none" className="overflow-hidden">
-      <div className="px-5 py-4 border-b border-border bg-surface-secondary/30">
-        <h3 className="text-sm font-semibold text-text-primary">Scan History</h3>
-        <p className="text-xs text-text-muted mt-0.5">Most recent scans first</p>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-surface-secondary border-b border-border">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">Completed</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">Assets</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">Vulnerabilities</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">Severity Mix</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">Risk Score</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wide">Duration</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {scanHistory.map(scan => {
-              const statusVariant =
-                scan.status === "COMPLETED"
-                  ? "success"
-                  : scan.status === "FAILED"
-                  ? "error"
-                  : scan.status === "IN_PROGRESS"
-                  ? "warning"
-                  : "neutral";
-
-              return (
-                <tr
-                  key={scan.id}
-                  className="hover:bg-surface-secondary/40 transition-colors cursor-pointer"
-                  onClick={() => onOpenScan(scan.id)}
-                >
-                  <td className="px-4 py-3 text-sm text-text-primary">{formatScanDate(scan.completedAt)}</td>
-                  <td className="px-4 py-3">
-                    <Badge variant={statusVariant} size="sm">{scan.status}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-text-secondary">
-                    {scan.scannedAssets}/{scan.totalAssets}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-text-primary font-medium">{scan.vulnerabilitiesFound}</td>
-                  <td className="px-4 py-3 text-xs text-text-secondary">
-                    C:{scan.criticalCount} H:{scan.highCount} M:{scan.mediumCount} L:{scan.lowCount}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-text-primary">
-                    {scan.riskScore != null ? scan.riskScore.toFixed(1) : "-"}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-text-secondary">
-                    {formatScanDuration(scan.startedAt, scan.completedAt)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-}
-
-function ScanHistorySlideOver({
-  environmentId,
-  scanId,
-  onClose,
-}: {
-  environmentId: string;
-  scanId: string | null;
-  onClose: () => void;
-}) {
-  const [activeScanId, setActiveScanId] = useState<string | null>(scanId);
-  const [scan, setScan] = useState<LatestScan | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [expandedAssets, setExpandedAssets] = useState<Set<string>>(new Set());
-
-  const isOpen = Boolean(scanId);
-
-  useEffect(() => {
-    if (scanId) {
-      setActiveScanId(scanId);
-    }
-  }, [scanId]);
-
-  useEffect(() => {
-    if (scanId) return;
-    const timeout = setTimeout(() => {
-      setActiveScanId(null);
-      setScan(null);
-      setExpandedAssets(new Set());
-      setError(null);
-    }, 300);
-    return () => clearTimeout(timeout);
-  }, [scanId]);
-
-  useEffect(() => {
-    if (!activeScanId) return;
-
-    let isMounted = true;
-
-    const load = async () => {
-      setIsLoading(true);
-      setError(null);
-      setScan(null);
-
-      try {
-        const response = await getScanById(environmentId, activeScanId);
-        if (!isMounted) return;
-
-        if (response.data) {
-          setScan(response.data);
-          setExpandedAssets(new Set(response.data.assetScans.slice(0, 1).map(a => a.id)));
-        } else {
-          setError(response.message || "Failed to load scan details");
-        }
-      } catch (err) {
-        if (!isMounted) return;
-        setError(err instanceof Error ? err.message : "Failed to load scan details");
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-
-    load();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [environmentId, activeScanId]);
-
-  const toggleAsset = (assetScanId: string) => {
-    setExpandedAssets(prev => {
-      const next = new Set(prev);
-      if (next.has(assetScanId)) {
-        next.delete(assetScanId);
-      } else {
-        next.add(assetScanId);
-      }
-      return next;
-    });
-  };
-
-  if (!activeScanId) return null;
-
-  return (
-    <>
-      <div
-        className={`fixed inset-0 bg-black/45 z-40 transition-opacity duration-300 ${
-          isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`}
-        onClick={onClose}
-      />
-
-      <aside
-        className={`fixed top-0 right-0 h-full w-[620px] max-w-full bg-surface border-l border-border shadow-2xl z-50 flex flex-col transition-transform duration-300 ease-out ${
-          isOpen ? "translate-x-0" : "translate-x-full"
-        }`}
-      >
-        <div className="px-6 py-4 border-b border-border flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-semibold text-text-primary">Scan Details</h3>
-            <p className="text-sm text-text-muted mt-0.5 font-mono">{activeScanId}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors"
-          >
-            <FiX className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {isLoading && <div className="text-sm text-text-secondary">Loading scan details...</div>}
-
-          {!isLoading && error && (
-            <div className="bg-error-bg border border-error-border text-error-text px-4 py-3 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
-
-          {!isLoading && !error && scan && (
-            <>
-              <Card className="space-y-3">
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-text-muted">Completed</p>
-                    <p className="text-text-primary font-medium">{formatScanDate(scan.completedAt)}</p>
-                  </div>
-                  <div>
-                    <p className="text-text-muted">Duration</p>
-                    <p className="text-text-primary font-medium">{formatScanDuration(scan.startedAt, scan.completedAt)}</p>
-                  </div>
-                  <div>
-                    <p className="text-text-muted">Assets Scanned</p>
-                    <p className="text-text-primary font-medium">{scan.scannedAssets}/{scan.totalAssets}</p>
-                  </div>
-                  <div>
-                    <p className="text-text-muted">Vulnerabilities</p>
-                    <p className="text-text-primary font-medium">{scan.vulnerabilitiesFound}</p>
-                  </div>
-                  <div>
-                    <p className="text-text-muted">Risk Score</p>
-                    <p className="text-text-primary font-medium">{scan.riskScore != null ? scan.riskScore.toFixed(1) : "-"}</p>
-                  </div>
-                  <div>
-                    <p className="text-text-muted">Status</p>
-                    <p className="text-text-primary font-medium">{scan.status}</p>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-border text-xs text-text-secondary">
-                  <span className="mr-3">Critical: {scan.criticalCount}</span>
-                  <span className="mr-3">High: {scan.highCount}</span>
-                  <span className="mr-3">Medium: {scan.mediumCount}</span>
-                  <span>Low: {scan.lowCount}</span>
-                </div>
-              </Card>
-
-              <Card padding="none" className="overflow-hidden">
-                <div className="px-4 py-3 border-b border-border bg-surface-secondary/30">
-                  <h4 className="text-sm font-semibold text-text-primary">Scanned Assets</h4>
-                </div>
-                <div className="divide-y divide-border">
-                  {scan.assetScans.map(assetScan => (
-                    <div key={assetScan.id} className="px-4 py-3">
-                      <button
-                        onClick={() => toggleAsset(assetScan.id)}
-                        className="w-full flex items-center justify-between gap-3 text-left"
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-text-primary">{assetScan.asset.name}</p>
-                          <p className="text-xs text-text-muted">{assetScan.asset.type} · {assetScan.asset.domain}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="neutral" size="sm">
-                            {assetScan.vulnerabilities.length} CVE{assetScan.vulnerabilities.length !== 1 ? "s" : ""}
-                          </Badge>
-                          {expandedAssets.has(assetScan.id) ? (
-                            <FiChevronUp className="w-4 h-4 text-text-muted" />
-                          ) : (
-                            <FiChevronDown className="w-4 h-4 text-text-muted" />
-                          )}
-                        </div>
-                      </button>
-
-                      {expandedAssets.has(assetScan.id) && (
-                        <div className="mt-3 space-y-3 animate-in fade-in duration-200">
-                          <div className="text-xs text-text-secondary bg-surface-secondary rounded-lg px-3 py-2">
-                            <span className="mr-3">Critical: {assetScan.vulnerabilities.filter(v => v.vulnerability.severity === "CRITICAL").length}</span>
-                            <span className="mr-3">High: {assetScan.vulnerabilities.filter(v => v.vulnerability.severity === "HIGH").length}</span>
-                            <span className="mr-3">Medium: {assetScan.vulnerabilities.filter(v => v.vulnerability.severity === "MEDIUM").length}</span>
-                            <span>Low: {assetScan.vulnerabilities.filter(v => v.vulnerability.severity === "LOW").length}</span>
-                          </div>
-
-                          {assetScan.vulnerabilities.length === 0 && (
-                            <p className="text-xs text-text-muted">No vulnerabilities for this asset in this scan.</p>
-                          )}
-
-                          {assetScan.vulnerabilities.map(v => (
-                            <div key={`${assetScan.id}-${v.vulnerability.id}`} className="rounded-lg border border-border bg-surface-secondary/30 p-3">
-                              <div className="flex items-start justify-between gap-3 mb-1.5">
-                                <a
-                                  href={`https://nvd.nist.gov/vuln/detail/${v.vulnerability.cveId}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="font-mono text-xs text-blue-500 hover:text-blue-400 hover:underline"
-                                >
-                                  {v.vulnerability.cveId}
-                                </a>
-                                <div className="flex items-center gap-2">
-                                  <Badge
-                                    variant={
-                                      v.vulnerability.severity === "CRITICAL"
-                                        ? "error"
-                                        : v.vulnerability.severity === "HIGH"
-                                        ? "warning"
-                                        : "info"
-                                    }
-                                    size="sm"
-                                  >
-                                    {v.vulnerability.severity}
-                                  </Badge>
-                                  <span className="text-xs text-text-muted">
-                                    {v.vulnerability.cvssScore != null ? `CVSS ${v.vulnerability.cvssScore.toFixed(1)}` : "CVSS N/A"}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <p className="text-xs text-text-secondary line-clamp-2 mb-2">{v.vulnerability.description}</p>
-
-                              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-muted">
-                                <span>Published: {v.vulnerability.publishedDate ? new Date(v.vulnerability.publishedDate).toLocaleDateString("en-US") : "-"}</span>
-                                <span>Last Modified: {v.vulnerability.lastModifiedDate ? new Date(v.vulnerability.lastModifiedDate).toLocaleDateString("en-US") : "-"}</span>
-                                <span className="font-mono truncate max-w-[260px]">CPE: {v.cpeName}</span>
-                                {v.vulnerability.isMock && <span>Mock CVE</span>}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </>
-          )}
-        </div>
-      </aside>
-    </>
-  );
-}
-
-// ============================================
-// AI ENVIRONMENT BRIEFING PANEL
-// ============================================
-
-const RISK_STYLES: Record<EnvironmentBriefing["overallRisk"], { border: string; bg: string; text: string; badge: string }> = {
-  CRITICAL: { border: "border-red-500/40",   bg: "bg-red-500/5",    text: "text-red-400",    badge: "bg-red-500/15 text-red-400 border-red-500/30" },
-  HIGH:     { border: "border-orange-500/40", bg: "bg-orange-500/5", text: "text-orange-400", badge: "bg-orange-500/15 text-orange-400 border-orange-500/30" },
-  MEDIUM:   { border: "border-yellow-500/40", bg: "bg-yellow-500/5", text: "text-yellow-400", badge: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30" },
-  LOW:      { border: "border-green-500/40",  bg: "bg-green-500/5",  text: "text-green-400",  badge: "bg-green-500/15 text-green-400 border-green-500/30" },
-};
-
-const URGENCY_DOT: Record<CriticalFinding["urgency"], string> = {
-  IMMEDIATE: "bg-red-500",
-  HIGH:      "bg-orange-500",
-  MEDIUM:    "bg-yellow-500",
-  LOW:       "bg-blue-500",
-};
-
-function EnvironmentBriefingPanel({
-  briefing,
-  isLoading,
-  error,
-  onRun,
-}: {
-  briefing: EnvironmentBriefing | null;
-  isLoading: boolean;
-  error: string | null;
-  onRun: () => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  // Show the trigger card when there's no briefing yet
-  if (!briefing && !isLoading && !error) {
-    return (
-      <div className="bg-surface border border-border rounded-xl p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
-            <FiShield className="w-4 h-4 text-indigo-400" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-text-primary">AI Environment Briefing</p>
-            <p className="text-xs text-text-muted">Analyze all assets and CVEs together for a holistic threat assessment</p>
-          </div>
-        </div>
-        <button
-          onClick={onRun}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 hover:border-indigo-500/50 rounded-lg transition-all shrink-0"
-        >
-          <FiZap className="w-3.5 h-3.5" />
-          Generate Briefing
-        </button>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="bg-surface border border-border rounded-xl p-4 flex items-center gap-3">
-        <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0" />
-        <p className="text-sm text-text-muted">Analyzing all assets and vulnerabilities...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-error-bg border border-error-border rounded-xl p-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-error-text text-sm">
-          <FiAlertTriangle className="w-4 h-4 shrink-0" />
-          {error}
-        </div>
-        <button onClick={onRun} className="text-xs text-error-text underline shrink-0">Retry</button>
-      </div>
-    );
-  }
-
-  if (!briefing) return null;
-
-  const riskStyle = RISK_STYLES[briefing.overallRisk];
-
-  return (
-    <div className={`bg-surface border rounded-xl overflow-hidden ${riskStyle.border}`}>
-      {/* Header row — always visible */}
-      <button
-        onClick={() => setExpanded(prev => !prev)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-secondary/50 transition-colors text-left"
-      >
-        <div className="flex items-center gap-3">
-          <div className={`w-8 h-8 rounded-lg ${riskStyle.bg} flex items-center justify-center`}>
-            <FiShield className={`w-4 h-4 ${riskStyle.text}`} />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-text-primary flex items-center gap-2">
-              AI SOC Briefing
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${riskStyle.badge}`}>
-                {briefing.overallRisk} RISK
-              </span>
-            </p>
-            <p className="text-xs text-text-muted mt-0.5 line-clamp-1">{briefing.threatSummary}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={(e) => { e.stopPropagation(); onRun(); }}
-            className="text-xs text-indigo-400 hover:text-indigo-300 px-2 py-1 rounded hover:bg-indigo-500/10 transition-colors"
-          >
-            Refresh
-          </button>
-          {expanded ? <FiChevronDown className="w-4 h-4 text-text-muted" /> : <FiChevronRight className="w-4 h-4 text-text-muted" />}
-        </div>
-      </button>
-
-      {/* Expanded content */}
-      {expanded && (
-        <div className="px-5 pb-5 space-y-5 border-t border-border">
-          {/* Threat Summary */}
-          <div className="pt-4">
-            <p className="text-sm text-text-secondary leading-relaxed">{briefing.threatSummary}</p>
-          </div>
-
-          {/* Critical Findings */}
-          {briefing.criticalFindings.length > 0 && (
-            <div>
-              <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">
-                Critical Findings
-              </h4>
-              <div className="space-y-3">
-                {briefing.criticalFindings.map((finding, i) => (
-                  <div key={i} className="bg-surface-secondary rounded-lg p-3 border border-border">
-                    <div className="flex items-start gap-2 mb-1.5">
-                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${URGENCY_DOT[finding.urgency]}`} />
-                      <p className="text-sm font-medium text-text-primary">{finding.title}</p>
-                    </div>
-                    <p className="text-xs text-text-secondary leading-relaxed ml-4 mb-2">{finding.description}</p>
-                    <div className="ml-4 flex flex-wrap gap-2 items-center">
-                      <div className="flex flex-wrap gap-1">
-                        {finding.affectedAssets.map((asset) => (
-                          <span key={asset} className="text-xs bg-surface border border-border text-text-muted px-1.5 py-0.5 rounded">
-                            {asset}
-                          </span>
-                        ))}
-                      </div>
-                      <span className="text-xs text-indigo-400 font-medium">→ {finding.recommendedAction}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Systemic Risks */}
-          {briefing.systemicRisks.length > 0 && (
-            <div>
-              <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
-                Systemic Risks
-              </h4>
-              <ul className="space-y-1.5">
-                {briefing.systemicRisks.map((risk, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
-                    <FiAlertTriangle className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
-                    {risk}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Prioritized Actions */}
-          {briefing.prioritizedActions.length > 0 && (
-            <div>
-              <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
-                Prioritized Actions
-              </h4>
-              <ol className="space-y-1.5">
-                {briefing.prioritizedActions.map((action, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
-                    <span className="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                      {i + 1}
-                    </span>
-                    {action}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-
-          {/* Industry Guidance */}
-          <div>
-            <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
-              Industry Guidance
-            </h4>
-            <p className="text-sm text-text-secondary leading-relaxed">{briefing.industryGuidance}</p>
-          </div>
-
-          {/* Footer */}
-          {briefing.model !== "stub" && (
-            <p className="text-xs text-text-muted">Powered by {briefing.model}</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ============================================
 // MAIN PAGE
 // ============================================
@@ -967,39 +422,34 @@ export default function SecurityPage() {
     configureAndStartScan: contextStartScan,
   } = useScan();
 
+  // Core scan data
   const [latestScan, setLatestScan] = useState<LatestScan | null>(null);
+  const [displayedScan, setDisplayedScan] = useState<LatestScan | null>(null);
   const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([]);
+  const [isLoadingHistoryScan, setIsLoadingHistoryScan] = useState(false);
+  const scanCache = useRef<Map<string, LatestScan>>(new Map());
+
+  // Page state
   const [isLoading, setIsLoading] = useState(true);
-  const [workflows, setWorkflows] = useState<Map<string, WorkflowItem>>(new Map());
-  const [workflowStats, setWorkflowStats] = useState<WorkflowStats | null>(null);
-  const [selectedSeverity, setSelectedSeverity] = useState<ScanSeverity | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<VulnStatus | null>(null);
-  const [selectedVuln, setSelectedVuln] = useState<SelectedVuln | null>(null);
-  const [selectedScanId, setSelectedScanId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // AI Environment Briefing state
-  const [briefing, setBriefing] = useState<EnvironmentBriefing | null>(null);
-  const [isBriefingLoading, setIsBriefingLoading] = useState(false);
-  const [briefingError, setBriefingError] = useState<string | null>(null);
+  // Workflow state
+  const [workflows, setWorkflows] = useState<Map<string, WorkflowItem>>(new Map());
+  const [workflowStats, setWorkflowStats] = useState<WorkflowStats | null>(null);
 
-  const runEnvironmentBriefing = useCallback(async () => {
-    setIsBriefingLoading(true);
-    setBriefingError(null);
-    try {
-      const res = await requestEnvironmentBriefing(envId);
-      if (res.success && res.data) {
-        setBriefing(res.data);
-      } else {
-        setBriefingError(res.error || "Failed to generate briefing");
-      }
-    } catch (e) {
-      setBriefingError(e instanceof Error ? e.message : "Unknown error");
-    } finally {
-      setIsBriefingLoading(false);
-    }
-  }, [envId]);
+  // Filter state
+  const [selectedSeverity, setSelectedSeverity] = useState<ScanSeverity | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<VulnStatus | null>(null);
+
+  // Selected vulnerability slide-over
+  const [selectedVuln, setSelectedVuln] = useState<SelectedVuln | null>(null);
+
+  // Derived: null = showing latest, non-null = showing a historical scan
+  const selectedHistoryScanId =
+    displayedScan && latestScan && displayedScan.id !== latestScan.id
+      ? displayedScan.id
+      : null;
 
   const isScanningThisEnv = isScanning && scanningEnvId === envId;
 
@@ -1010,7 +460,11 @@ export default function SecurityPage() {
         getLatestScan(envId).catch(() => null),
         getScanHistory(envId, 10),
       ]);
-      setLatestScan(latest?.data || null);
+
+      const latestData = latest?.data || null;
+      setLatestScan(latestData);
+      setDisplayedScan(latestData);
+      if (latestData) scanCache.current.set(latestData.id, latestData);
       setScanHistory(history.data);
 
       const [workflowsRes, statsRes] = await Promise.all([
@@ -1042,6 +496,30 @@ export default function SecurityPage() {
     }
   }, [contextScanResult, scanningEnvId, envId, loadData]);
 
+  // Select a historical scan from the dropdown; null = revert to latest
+  const handleScanSelect = useCallback(async (scanId: string | null) => {
+    if (!scanId) {
+      setDisplayedScan(latestScan);
+      return;
+    }
+    if (scanCache.current.has(scanId)) {
+      setDisplayedScan(scanCache.current.get(scanId)!);
+      return;
+    }
+    setIsLoadingHistoryScan(true);
+    try {
+      const res = await getScanById(envId, scanId);
+      if (res.success && res.data) {
+        scanCache.current.set(scanId, res.data);
+        setDisplayedScan(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to load historical scan:", err);
+    } finally {
+      setIsLoadingHistoryScan(false);
+    }
+  }, [envId, latestScan]);
+
   const handleStatusChange = async (workflowId: string, newStatus: VulnStatus) => {
     try {
       const response = await updateWorkflow(workflowId, { status: newStatus });
@@ -1062,10 +540,10 @@ export default function SecurityPage() {
 
   const INACTIVE_STATUSES = new Set<VulnStatus>(["RESOLVED", "FALSE_POSITIVE", "RISK_ACCEPTED"]);
 
-  // Only count active (OPEN / IN_PROGRESS) threats — resolved/accepted don't show as danger
+  // Severity counts reflect the displayed scan's active threats
   const severityCounts = useMemo((): Record<ScanSeverity, number> => {
     const counts: Record<ScanSeverity, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, UNKNOWN: 0 };
-    latestScan?.assetScans.forEach(a =>
+    displayedScan?.assetScans.forEach(a =>
       a.vulnerabilities.forEach(v => {
         const wf = getWorkflowForVuln(v.vulnerability.id, a.asset.id, v.cpeName);
         if (wf && INACTIVE_STATUSES.has(wf.status)) return;
@@ -1073,10 +551,10 @@ export default function SecurityPage() {
       })
     );
     return counts;
-  }, [latestScan, getWorkflowForVuln]);
+  }, [displayedScan, getWorkflowForVuln]);
 
   const filteredAssetScans = useMemo(() => {
-    let filtered = latestScan?.assetScans || [];
+    let filtered = displayedScan?.assetScans || [];
     if (selectedSeverity) {
       filtered = filtered.filter(a =>
         a.vulnerabilities.some(v => v.vulnerability.severity === selectedSeverity)
@@ -1101,10 +579,10 @@ export default function SecurityPage() {
       );
     }
     return filtered;
-  }, [latestScan?.assetScans, selectedSeverity, selectedStatus, searchQuery, getWorkflowForVuln]);
+  }, [displayedScan?.assetScans, selectedSeverity, selectedStatus, searchQuery, getWorkflowForVuln]);
 
-  // Convert risk score (0–100 = risk) to security score (0–100 = safe)
-  const securityScore = latestScan?.riskScore != null ? Math.round(100 - latestScan.riskScore) : null;
+  // Security score derived from the displayed scan
+  const securityScore = displayedScan?.riskScore != null ? Math.round(100 - displayedScan.riskScore) : null;
 
   if (isLoading) {
     return (
@@ -1133,23 +611,33 @@ export default function SecurityPage() {
                   : "No scans performed yet"}
               </p>
             </div>
-            <button
-              onClick={() => contextStartScan(envId)}
-              disabled={isScanningThisEnv}
-              className="px-4 py-2 bg-text-primary text-surface rounded-lg font-medium hover:bg-text-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-2"
-            >
-              {isScanningThisEnv ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-surface border-t-transparent rounded-full animate-spin" />
-                  Scanning...
-                </>
-              ) : (
-                <>
-                  <FiRefreshCw className="w-4 h-4" />
-                  Run Scan
-                </>
+            <div className="flex items-center gap-2">
+              {scanHistory.length > 0 && (
+                <ScanHistoryDropdown
+                  scanHistory={scanHistory}
+                  selectedScanId={selectedHistoryScanId}
+                  onSelectScan={handleScanSelect}
+                  isLoadingScan={isLoadingHistoryScan}
+                />
               )}
-            </button>
+              <button
+                onClick={() => contextStartScan(envId)}
+                disabled={isScanningThisEnv}
+                className="px-4 py-2 bg-text-primary text-surface rounded-lg font-medium hover:bg-text-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-2"
+              >
+                {isScanningThisEnv ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-surface border-t-transparent rounded-full animate-spin" />
+                    Scanning...
+                  </>
+                ) : (
+                  <>
+                    <FiRefreshCw className="w-4 h-4" />
+                    Run Scan
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1157,24 +645,20 @@ export default function SecurityPage() {
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {isScanningThisEnv && <ScanningProgress progress={progress} />}
 
-        {/* AI Environment Briefing */}
-        {latestScan && (
-          <EnvironmentBriefingPanel
-            briefing={briefing}
-            isLoading={isBriefingLoading}
-            error={briefingError}
-            onRun={runEnvironmentBriefing}
-          />
-        )}
+        {/* AI Security Analyst chat panel */}
+        <AIChatPanel
+          environmentId={envId}
+          hasActiveScan={!!latestScan}
+          vulnCount={latestScan?.vulnerabilitiesFound ?? 0}
+        />
 
-        {/* View Tabs */}
-        {latestScan && (
+        {/* View Tabs — only shown when there is scan data to display */}
+        {displayedScan && (
           <div className="flex items-center gap-2 border-b border-border">
             {[
               { id: "board",    label: "Board",    icon: FiLayout },
               { id: "assets",   label: "By Asset", icon: FiServer },
               { id: "list",     label: "List",     icon: FiLayers },
-              { id: "history",  label: "History",  icon: FiClock },
               { id: "overview", label: "Overview", icon: FiPieChart },
             ].map(tab => (
               <button
@@ -1193,7 +677,7 @@ export default function SecurityPage() {
           </div>
         )}
 
-        {latestScan ? (
+        {displayedScan ? (
           <div className="space-y-4">
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-3">
@@ -1307,18 +791,11 @@ export default function SecurityPage() {
 
             {viewMode === "overview" && (
               <OverviewPanel
-                latestScan={latestScan}
+                latestScan={displayedScan}
                 scanHistory={scanHistory}
                 workflows={workflows}
                 workflowStats={workflowStats}
                 securityScore={securityScore}
-              />
-            )}
-
-            {viewMode === "history" && (
-              <ScanHistoryView
-                scanHistory={scanHistory}
-                onOpenScan={scanId => setSelectedScanId(scanId)}
               />
             )}
           </div>
@@ -1338,12 +815,6 @@ export default function SecurityPage() {
           }}
         />
       )}
-
-      <ScanHistorySlideOver
-        environmentId={envId}
-        scanId={selectedScanId}
-        onClose={() => setSelectedScanId(null)}
-      />
     </div>
   );
 }
