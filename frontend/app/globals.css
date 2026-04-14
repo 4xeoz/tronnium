@@ -1,126 +1,164 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Wise-inspired Design System — Tronnium
+   Primary accent: Wise Green #9fe870
+   Near-black:     #0e0f0c
+   Dark green:     #163300
+   ============================================================ */
+
 :root,
 [data-theme="light"] {
-  /* Background colors */
-  --background: #ffffff;
-  --background-secondary: #F3F4F6;
-  --foreground: #111827;
-  
-  /* Brand colors */
-  --brand-color-1: #C3FA70;
-  --brand-color-2: #1F2937;
-  
-  /* UI colors */
-  --surface: #ffffff;
-  --surface-secondary: #F9FAFB;
-  --surface-tertiary: #F3F4F6;
-  --border: #E5E7EB;
-  --border-secondary: #D1D5DB;
-  --text-primary: #111827;
-  --text-secondary: #4B5563;
-  --text-muted: #9CA3AF;
-  
-  /* Semantic colors for light mode */
-  --error-bg: #FEF2F2;
-  --error-border: #FECACA;
-  --error-text: #DC2626;
-  --success-bg: #F0FDF4;
-  --success-border: #BBF7D0;
-  --success-text: #16A34A;
-  --warning-bg: #FFFBEB;
-  --warning-border: #FDE68A;
-  --warning-text: #D97706;
-  --info-bg: #EFF6FF;
-  --info-border: #BFDBFE;
-  --info-text: #2563EB;
+  /* ── Backgrounds ── */
+  --background:           #ffffff;
+  --background-secondary: #f5f8f0;
 
-  
-  /* Status indicators */
-  --status-active: #10B981;
-  --status-inactive: #6B7280;
-  --status-warning: #F59E0B;
-  --status-error: #EF4444;
+  /* ── Brand ── */
+  --brand-color-1: #9fe870;   /* Wise Green — buttons, accents */
+  --brand-color-2: #163300;   /* Dark Green — text on green */
+  --brand-mint:    #e2f6d5;   /* Light Mint — subtle surfaces */
+  --brand-pastel:  #cdffad;   /* Pastel Green — hover accent */
+
+  /* ── Surfaces ── */
+  --surface:           #ffffff;
+  --surface-secondary: #f9fbf6;
+  --surface-tertiary:  #f0f5ea;
+
+  /* ── Borders (ring-shadow style) ── */
+  --border:           rgba(14, 15, 12, 0.12);
+  --border-secondary: rgba(14, 15, 12, 0.22);
+
+  /* ── Text ── */
+  --text-primary:   #0e0f0c;
+  --text-secondary: #454745;
+  --text-muted:     #868685;
+
+  /* ── Semantic ── */
+  --error-bg:      #FEF2F2;
+  --error-border:  #FECACA;
+  --error-text:    #DC2626;
+  --success-bg:    #F0FDF4;
+  --success-border:#BBF7D0;
+  --success-text:  #16A34A;
+  --warning-bg:    #FFFBEB;
+  --warning-border:#FDE68A;
+  --warning-text:  #D97706;
+  --info-bg:       #EFF6FF;
+  --info-border:   #BFDBFE;
+  --info-text:     #2563EB;
+
+  /* ── Status dots ── */
+  --status-active:   #054d28;
+  --status-inactive: #868685;
+  --status-warning:  #D97706;
+  --status-error:    #DC2626;
 }
 
 [data-theme="dark"] {
-  /* Background colors - deeper, richer darks */
-  --background: #09090B;
-  --background-secondary: #0F1115;
-  --foreground: #FAFAFA;
-  
-  /* Brand colors */
-  --brand-color-1: #C3FA70;
-  --brand-color-2: #0F1115;
-  
-  /* UI colors - refined dark palette */
-  --surface: #121418;
-  --surface-secondary: #1A1D23;
-  --surface-tertiary: #22262E;
-  --border: #27272A;
-  --border-secondary: #3F3F46;
-  --text-primary: #FAFAFA;
-  --text-secondary: #A1A1AA;
-  --text-muted: #71717A;
-  
-  /* Semantic colors for dark mode - softer, easier on eyes */
-  --error-bg: #1C1517;
-  --error-border: #7F1D1D;
-  --error-text: #FCA5A5;
-  --success-bg: #14191A;
-  --success-border: #166534;
-  --success-text: #86EFAC;
-  --warning-bg: #1a1414;
-  --warning-border: #854D0E;
-  --warning-text: #FCD34D;
-  --info-bg: #14161C;
-  --info-border: #1E40AF;
-  --info-text: #93C5FD;
-  
-  /* Status indicators */
-  --status-active: #34D399;
-  --status-inactive: #71717A;
-  --status-warning: #FBBF24;
-  --status-error: #F87171;
+  /* ── Backgrounds ── */
+  --background:           #0e0f0c;
+  --background-secondary: #131710;
+
+  /* ── Brand (same green, works on dark) ── */
+  --brand-color-1: #9fe870;
+  --brand-color-2: #163300;
+  --brand-mint:    #152010;
+  --brand-pastel:  #1e3014;
+
+  /* ── Surfaces ── */
+  --surface:           #141810;
+  --surface-secondary: #1b2015;
+  --surface-tertiary:  #22281c;
+
+  /* ── Borders (green-tinted in dark mode) ── */
+  --border:           rgba(159, 232, 112, 0.10);
+  --border-secondary: rgba(159, 232, 112, 0.18);
+
+  /* ── Text ── */
+  --text-primary:   #f2f7ec;
+  --text-secondary: #a8b89c;
+  --text-muted:     #637558;
+
+  /* ── Semantic ── */
+  --error-bg:      #1C1517;
+  --error-border:  #7F1D1D;
+  --error-text:    #FCA5A5;
+  --success-bg:    #0d1f12;
+  --success-border:#166534;
+  --success-text:  #86EFAC;
+  --warning-bg:    #1a1510;
+  --warning-border:#854D0E;
+  --warning-text:  #FCD34D;
+  --info-bg:       #0f1420;
+  --info-border:   #1E40AF;
+  --info-text:     #93C5FD;
+
+  /* ── Status dots ── */
+  --status-active:   #9fe870;
+  --status-inactive: #637558;
+  --status-warning:  #FBBF24;
+  --status-error:    #F87171;
 }
 
+/* ── Tailwind v4 theme bridge ── */
 @theme inline {
-  --color-background: var(--background);
+  --color-background:           var(--background);
   --color-background-secondary: var(--background-secondary);
-  --color-foreground: var(--foreground);
-  --color-brand-1: var(--brand-color-1);
-  --color-brand-2: var(--brand-color-2);
-  --color-surface: var(--surface);
-  --color-surface-secondary: var(--surface-secondary);
-  --color-surface-tertiary: var(--surface-tertiary);
-  --color-border: var(--border);
-  --color-border-secondary: var(--border-secondary);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-muted: var(--text-muted);
-  --color-error-bg: var(--error-bg);
-  --color-error-border: var(--error-border);
-  --color-error-text: var(--error-text);
-  --color-success-bg: var(--success-bg);
-  --color-success-border: var(--success-border);
-  --color-success-text: var(--success-text);
-  --color-warning-bg: var(--warning-bg);
-  --color-warning-border: var(--warning-border);
-  --color-warning-text: var(--warning-text);
-  --color-info-bg: var(--info-bg);
-  --color-info-border: var(--info-border);
-  --color-info-text: var(--info-text);
-  --color-status-active: var(--status-active);
-  --color-status-inactive: var(--status-inactive);
-  --color-status-warning: var(--status-warning);
-  --color-status-error: var(--status-error);
-  --font-sans: var(--font-geist-sans);
+  --color-brand-1:              var(--brand-color-1);
+  --color-brand-2:              var(--brand-color-2);
+  --color-brand-mint:           var(--brand-mint);
+  --color-brand-pastel:         var(--brand-pastel);
+  --color-surface:              var(--surface);
+  --color-surface-secondary:    var(--surface-secondary);
+  --color-surface-tertiary:     var(--surface-tertiary);
+  --color-border:               var(--border);
+  --color-border-secondary:     var(--border-secondary);
+  --color-text-primary:         var(--text-primary);
+  --color-text-secondary:       var(--text-secondary);
+  --color-text-muted:           var(--text-muted);
+  --color-error-bg:             var(--error-bg);
+  --color-error-border:         var(--error-border);
+  --color-error-text:           var(--error-text);
+  --color-success-bg:           var(--success-bg);
+  --color-success-border:       var(--success-border);
+  --color-success-text:         var(--success-text);
+  --color-warning-bg:           var(--warning-bg);
+  --color-warning-border:       var(--warning-border);
+  --color-warning-text:         var(--warning-text);
+  --color-info-bg:              var(--info-bg);
+  --color-info-border:          var(--info-border);
+  --color-info-text:            var(--info-text);
+  --color-status-active:        var(--status-active);
+  --color-status-inactive:      var(--status-inactive);
+  --color-status-warning:       var(--status-warning);
+  --color-status-error:         var(--status-error);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
 }
 
+/* ── Base styles ── */
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  color: var(--text-primary);
+  font-family: var(--font-inter, Inter, Arial, sans-serif);
+  font-weight: 400;
+  font-feature-settings: "calt";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ── Wise-style button scale animations ── */
+.btn-wise {
+  transition: transform 0.15s ease;
+}
+.btn-wise:hover  { transform: scale(1.05); }
+.btn-wise:active { transform: scale(0.95); }
+
+/* ── Display text (Wise billboard style) ── */
+.text-display {
+  font-weight: 900;
+  line-height: 0.88;
+  font-feature-settings: "calt";
+  letter-spacing: -0.02em;
 }
