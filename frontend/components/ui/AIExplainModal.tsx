@@ -40,7 +40,7 @@ export function AIExplainModal({
 			if (response.success && response.data) {
 				setExplanation(response.data);
 			} else {
-				setError(response.error || "Failed to generate explanation");
+				setError(response.message || "Failed to generate explanation");
 			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "An error occurred");

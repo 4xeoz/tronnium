@@ -261,8 +261,8 @@ export async function createRelationship(
   toAssetId: string,
   type: RelationType,
   criticality: CriticalityLevel
-): Promise<ApiResponse<any>> {
-  const response = await apiFetch<ApiResponse<any>>(
+): Promise<ApiResponse<Relationship>> {
+  const response = await apiFetch<Relationship>(
     `/relationships/${environmentId}`,
     {
       method: "POST",

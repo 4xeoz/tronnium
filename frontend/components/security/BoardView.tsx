@@ -50,18 +50,18 @@ type VulnerabilityCard = {
 // ============================================
 
 const SEVERITY_CONFIG: Record<ScanSeverity, { bg: string; label: string }> = {
-  CRITICAL: { bg: "bg-red-500",    label: "Critical" },
-  HIGH:     { bg: "bg-orange-500", label: "High" },
-  MEDIUM:   { bg: "bg-yellow-500", label: "Medium" },
-  LOW:      { bg: "bg-blue-500",   label: "Low" },
-  UNKNOWN:  { bg: "bg-gray-500",   label: "Unknown" },
+  CRITICAL: { bg: "bg-error-text",    label: "Critical" },
+  HIGH:     { bg: "bg-warning-text", label: "High" },
+  MEDIUM:   { bg: "bg-info-text",   label: "Medium" },
+  LOW:      { bg: "bg-success-text",   label: "Low" },
+  UNKNOWN:  { bg: "bg-text-muted",   label: "Unknown" },
 };
 
 const STATUS_COLORS: Record<VulnStatus, { bg: string; text: string; border: string; dot: string }> = {
   OPEN:           { bg: "bg-error-bg",          text: "text-error-text",    border: "border-error-border",   dot: "bg-red-500" },
   IN_PROGRESS:    { bg: "bg-warning-bg",         text: "text-warning-text",  border: "border-warning-border", dot: "bg-amber-500" },
   RESOLVED:       { bg: "bg-success-bg",         text: "text-success-text",  border: "border-success-border", dot: "bg-green-500" },
-  FALSE_POSITIVE: { bg: "bg-surface-secondary",  text: "text-text-secondary",border: "border-border",         dot: "bg-gray-400" },
+  FALSE_POSITIVE: { bg: "bg-surface-secondary",  text: "text-text-secondary",border: "border-border",         dot: "bg-text-muted" },
   RISK_ACCEPTED:  { bg: "bg-info-bg",            text: "text-info-text",     border: "border-info-border",    dot: "bg-blue-500" },
 };
 
@@ -127,7 +127,7 @@ function BoardCard({
           {/* CVE ID — click to open detail panel */}
           <button
             onClick={() => onVulnClick(card)}
-            className="font-mono text-xs font-medium text-blue-500 hover:text-blue-400 hover:underline truncate text-left"
+            className="font-mono text-xs font-medium text-brand-2 hover:underline truncate text-left"
           >
             {card.cveId}
           </button>

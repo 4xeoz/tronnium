@@ -13,7 +13,6 @@ import {
   deleteRelationship,
   getLatestScan,
   type Asset,
-  type Relationship,
   type RelationType,
   type CriticalityLevel,
   type ScanSeverity,
@@ -32,9 +31,12 @@ import ReactFlow, {
   Connection,
   Edge,
   Node,
+  type NodeChange,
+  type XYPosition,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { updateAseetPosition } from '@/lib/api/assets'
+import { Button } from '@/components/ui/Button'
 
 export type VulnSummary = {
   critical: number;
@@ -47,15 +49,9 @@ export type VulnSummary = {
 
 const EMPTY_VULN_SUMMARY: VulnSummary = { critical: 0, high: 0, medium: 0, low: 0, total: 0, highestSeverity: null }
 
-
-
 const nodeTypes = { asset: AssetNode }
 const edgeTypes = { dependency: DependencyEdge }
-
-
-
-
-
+const INACTIVE_STATUSES = new Set(['RESOLVED', 'FALSE_POSITIVE', 'RISK_ACCEPTED'])
 
 const Page = () => {
   const params = useParams()
@@ -66,14 +62,9 @@ const Page = () => {
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null)
   const [selectedVuln, setSelectedVuln] = useState<SelectedVuln | null>(null)
   const [workflowsForAsset, setWorkflowsForAsset] = useState<Map<string, WorkflowItem>>(new Map())
-  const [error, setError] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null)
-
-  // To track pending position updates for debouncing
   const positionUpdateTimeouts = useRef<{ [id: string]: NodeJS.Timeout }>({})
-
-
-  // ===== QUERIES =====
 
   const { data: ResponseOfAssets, isLoading: assetsLoading } = useQuery({
     queryKey: ['assets', envId],
@@ -103,20 +94,14 @@ const Page = () => {
     refetchOnWindowFocus: false,
   })
 
-  // ===== MUTATIONS =====
-
   const createMutation = useMutation({
-    mutationFn: (data: {
-      fromAssetId: string
-      toAssetId: string
-      type: RelationType
-      criticality: CriticalityLevel
-    }) => createRelationship(envId, data.fromAssetId, data.toAssetId, data.type, data.criticality),
+    mutationFn: (data: { fromAssetId: string; toAssetId: string; type: RelationType; criticality: CriticalityLevel }) =>
+      createRelationship(envId, data.fromAssetId, data.toAssetId, data.type, data.criticality),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['relationships', envId] })
       setError(null)
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       const msg = err.message || 'Failed to create relationship'
       console.error(msg)
       setError(msg)
@@ -124,11 +109,7 @@ const Page = () => {
   })
 
   const updateMutation = useMutation({
-    mutationFn: (data: {
-      relationshipId: string
-      type?: RelationType
-      criticality?: CriticalityLevel
-    }) =>
+    mutationFn: (data: { relationshipId: string; type?: RelationType; criticality?: CriticalityLevel }) =>
       updateRelationship(envId, data.relationshipId, data.type, data.criticality),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['relationships', envId] })
@@ -161,17 +142,10 @@ const Page = () => {
     },
   })
 
-  // Extract assets and relationships from responses
-
   const assets = ResponseOfAssets?.data || [];
-
-  // Build per-asset vulnerability summary — only OPEN / IN_PROGRESS threats count as danger
-  const INACTIVE_STATUSES = new Set(['RESOLVED', 'FALSE_POSITIVE', 'RISK_ACCEPTED'])
   const workflowLookup = useMemo(() => {
-    const map = new Map<string, string>() // key → status
-    workflowsRes?.data?.forEach(w =>
-      map.set(`${w.vulnerabilityId}-${w.assetId}-${w.cpeName}`, w.status)
-    )
+    const map = new Map<string, string>()
+    workflowsRes?.data?.forEach(w => map.set(`${w.vulnerabilityId}-${w.assetId}-${w.cpeName}`, w.status))
     return map
   }, [workflowsRes])
 
@@ -203,22 +177,13 @@ const Page = () => {
     return map
   }, [latestScanRes, workflowLookup])
 
-  // ===== NODE/EDGE CONVERSION =====
-
   const assetNodes = useMemo(() => {
-    if (!ResponseOfAssets) return [] as Node[]
-
-    if (ResponseOfAssets.success === false) {
-      setError(ResponseOfAssets.message || 'Failed to load assets')
-      return [] as Node[]
-    }
-
+    if (!ResponseOfAssets || ResponseOfAssets.success === false) return [] as Node[]
     const cols = 3
     const xGap = 240
     const yGap = 120
-
-
-    return assets.map((asset, idx) => ({
+    const assetList = ResponseOfAssets.data || []
+    return assetList.map((asset, idx) => ({
       id: asset.id,
       type: 'asset',
       position: {
@@ -230,15 +195,8 @@ const Page = () => {
   }, [ResponseOfAssets, assetVulnMap])
 
   const relationshipEdges = useMemo(() => {
-    if (!ResponseOfrelationships) return [] as Edge[]
-
-    if (ResponseOfrelationships.success === false) {
-      setError(ResponseOfrelationships.message || 'Failed to load relationships')
-      return [] as Edge[]
-    }
-    
+    if (!ResponseOfrelationships || ResponseOfrelationships.success === false) return [] as Edge[]
     const relationships = ResponseOfrelationships.data
-
     return relationships.map((rel) => ({
       id: rel.id,
       source: rel.fromAssetId,
@@ -251,51 +209,29 @@ const Page = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
-  // Sync nodes and edges
-  useEffect(() => {
-    if (assetNodes.length > 0) setNodes(assetNodes)
-  }, [assetNodes, setNodes])
+  useEffect(() => { if (assetNodes.length > 0) setNodes(assetNodes) }, [assetNodes, setNodes])
+  useEffect(() => { setEdges(relationshipEdges) }, [relationshipEdges, setEdges])
 
-  useEffect(() => {
-    setEdges(relationshipEdges)
-  }, [relationshipEdges, setEdges])
-
-  // ===== EVENT HANDLERS =====
-
-  /**
-   * FIX #2: Don't immediately add edge
-   * Instead validate and show confirmation modal
-   */
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return
-
-    // Validation
     if (connection.source === connection.target) {
       setError('Cannot create a relationship with the same asset')
       setTimeout(() => setError(null), 3000)
       return
     }
-
-    // Check if relationship already exists
     const exists = relationshipEdges?.some(
-      (rel) =>
-        rel.source === connection.source &&
-        rel.target === connection.target
+      (rel) => rel.source === connection.source && rel.target === connection.target
     )
-
     if (exists) {
       setError('This relationship already exists')
       setTimeout(() => setError(null), 3000)
       return
     }
-
-    // Store for modal confirmation
     setPendingConnection(connection)
   }, [relationshipEdges])
 
   const handleCreateRelationship = (type: RelationType, criticality: CriticalityLevel) => {
     if (!pendingConnection?.source || !pendingConnection?.target) return
-
     createMutation.mutate({
       fromAssetId: pendingConnection.source,
       toAssetId: pendingConnection.target,
@@ -320,45 +256,27 @@ const Page = () => {
     setSelectedEdge(null)
   }, [])
 
-
-  // Debounce position updates fucntion 
-  const debouncedUpdatePosition = (assetId: string, x: number, y: number) => {
-
-  // Clear any existing timeout for this asset
-  if (positionUpdateTimeouts.current[assetId]) {
-    clearTimeout(positionUpdateTimeouts.current[assetId])
-  }
-  // Set a new timeout
-  positionUpdateTimeouts.current[assetId] = setTimeout(() => {
-    updatePositionMutation.mutate({ assetId, x, y })
-  }, 500)
-  }
-
-  // Handle node drag stop to update position
-  const handleNodesChange = useCallback((changes: any[]) => {
-    onNodesChange(changes) // still update the local state immediately for smooth dragging
-
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    onNodesChange(changes)
     changes.forEach((change) => {
-      if (change.type === 'position' && change.dragging === false && change.id) {
-        const node = nodes.find((n) => n.id === change.id)
-        if (node) {
-          debouncedUpdatePosition(node.id, node.position.x, node.position.y)
+      if (change.type === 'position' && !change.dragging && change.id) {
+        const pos = (change as NodeChange & { position?: XYPosition }).position
+        if (!pos) return
+        if (positionUpdateTimeouts.current[change.id]) {
+          clearTimeout(positionUpdateTimeouts.current[change.id])
         }
+        positionUpdateTimeouts.current[change.id] = setTimeout(() => {
+          updatePositionMutation.mutate({ assetId: change.id, x: pos.x, y: pos.y })
+        }, 500)
       }
     })
+  }, [onNodesChange, updatePositionMutation])
 
-  }, [onNodesChange, nodes])
-
-
-
-  
   const handleWorkflowsLoaded = useCallback((wfs: WorkflowItem[]) => {
     const map = new Map<string, WorkflowItem>()
     wfs.forEach(w => map.set(`${w.vulnerabilityId}-${w.assetId}-${w.cpeName}`, w))
     setWorkflowsForAsset(map)
   }, [])
-
-  // ===== RENDER =====
 
   const isLoading = assetsLoading || relationshipsLoading
 
@@ -372,7 +290,6 @@ const Page = () => {
 
   return (
     <div className="h-full w-full flex relative group">
-      {/* Canvas */}
       <div className="flex-1">
         <ReactFlow
           nodes={nodes}
@@ -391,99 +308,77 @@ const Page = () => {
           defaultEdgeOptions={{ type: 'dependency' }}
         >
           <Controls
-            className="!bg-surface !border-border !rounded-lg !shadow-md [&>button]:!bg-surface [&>button]:!border-border [&>button]:!text-text-secondary [&>button:hover]:!bg-surface-secondary"
+            className="!bg-surface !border-border !rounded-[10px] !shadow-[var(--shadow-ring)] [&>button]:!bg-surface [&>button]:!border-border [&>button]:!text-text-secondary [&>button:hover]:!bg-surface-secondary"
           />
           <MiniMap
-            className="!bg-surface !border-border !rounded-lg"
+            className="!bg-surface !border-border !rounded-[10px]"
             nodeColor="var(--brand-color-1)"
             maskColor="var(--background-secondary)"
           />
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
         </ReactFlow>
 
-        {/* Error toast */}
         {error && (
-          <div className="absolute bottom-4 left-4 right-4 max-w-sm bg-error-bg border border-error-border rounded-lg p-3 text-error-text text-sm animate-slideUp">
+          <div className="absolute bottom-4 left-4 right-4 max-w-sm mx-auto bg-error-bg border border-error-border rounded-[16px] p-3 text-error-text text-sm animate-[slideUp_200ms_ease]">
             {error}
           </div>
         )}
 
-        {/* Pending connection modal - FIX #2 */}
         {pendingConnection && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-50">
-            <div className="bg-surface border border-border rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
-              <h2 className="text-lg font-semibold text-text-primary mb-4">Create Relationship</h2>
-
-              <div className="mb-4 p-3 bg-surface-secondary rounded-lg">
-                <div className="text-xs text-text-muted mb-1">FROM → TO</div>
-                <div className="text-sm font-medium text-text-primary">
+            <div className="bg-surface border border-border rounded-[24px] shadow-[var(--shadow-card)] p-6 max-w-sm w-full mx-4 animate-[slideUp_200ms_ease]">
+              <h2 className="text-[22px] font-bold text-text-primary tracking-[-0.3px] mb-4">Create Relationship</h2>
+              <div className="mb-4 p-3 bg-background-secondary rounded-[10px]">
+                <div className="text-[11px] text-text-muted uppercase tracking-wide mb-1">FROM → TO</div>
+                <div className="text-sm font-semibold text-text-primary">
                   {assets?.find((a) => a.id === pendingConnection.source)?.name || 'Asset'} →{' '}
                   {assets?.find((a) => a.id === pendingConnection.target)?.name || 'Asset'}
                 </div>
               </div>
-
               <div className="space-y-3 mb-5">
                 <div>
-                  <label className="block text-xs font-semibold text-text-primary mb-2 uppercase">
-                    Type
-                  </label>
+                  <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Type</label>
                   <div className="space-y-1">
-                    {(['DEPENDS_ON', 'CONTROLS', 'PROVIDES_SERVICE', 'SHARES_DATA_WITH'] as const).map(
-                      (t) => (
-                        <label key={t} className="flex items-center gap-2 p-2 hover:bg-surface-secondary rounded cursor-pointer">
-                          <input type="radio" name="type" value={t} defaultChecked={t === 'DEPENDS_ON'} />
-                          <span className="text-sm text-text-primary">
-                            {t.replace(/_/g, ' ')}
-                          </span>
-                        </label>
-                      )
-                    )}
+                    {(['DEPENDS_ON', 'CONTROLS', 'PROVIDES_SERVICE', 'SHARES_DATA_WITH'] as const).map((t) => (
+                      <label key={t} className="flex items-center gap-2 p-2 hover:bg-background-secondary rounded-[10px] cursor-pointer transition-colors">
+                        <input type="radio" name="type" value={t} defaultChecked={t === 'DEPENDS_ON'} className="accent-brand-1" />
+                        <span className="text-sm text-text-primary">{t.replace(/_/g, ' ')}</span>
+                      </label>
+                    ))}
                   </div>
                 </div>
-
                 <div>
-                  <label className="block text-xs font-semibold text-text-primary mb-2 uppercase">
-                    Criticality
-                  </label>
+                  <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Criticality</label>
                   <div className="space-y-1">
                     {(['low', 'medium', 'high'] as const).map((c) => (
-                      <label key={c} className="flex items-center gap-2 p-2 hover:bg-surface-secondary rounded cursor-pointer">
-                        <input type="radio" name="criticality" value={c} defaultChecked={c === 'medium'} />
+                      <label key={c} className="flex items-center gap-2 p-2 hover:bg-background-secondary rounded-[10px] cursor-pointer transition-colors">
+                        <input type="radio" name="criticality" value={c} defaultChecked={c === 'medium'} className="accent-brand-1" />
                         <span className="text-sm text-text-primary capitalize">{c}</span>
                       </label>
                     ))}
                   </div>
                 </div>
               </div>
-
               <div className="flex gap-2">
-                <button
-                  onClick={() => setPendingConnection(null)}
-                  className="flex-1 px-4 py-2 bg-surface-secondary text-text-secondary rounded-lg hover:bg-surface transition"
-                >
-                  Cancel
-                </button>
-                <button
+                <Button variant="secondary" onClick={() => setPendingConnection(null)} className="flex-1">Cancel</Button>
+                <Button
                   onClick={() => {
-                    const type = (document.querySelector('input[name="type"]:checked') as HTMLInputElement)
-                      ?.value as RelationType
-                    const criticality = (
-                      document.querySelector('input[name="criticality"]:checked') as HTMLInputElement
-                    )?.value as CriticalityLevel
+                    const type = (document.querySelector('input[name="type"]:checked') as HTMLInputElement)?.value as RelationType
+                    const criticality = (document.querySelector('input[name="criticality"]:checked') as HTMLInputElement)?.value as CriticalityLevel
                     handleCreateRelationship(type, criticality)
                   }}
                   disabled={createMutation.isPending}
-                  className="flex-1 px-4 py-2 bg-brand-1 text-brand-2 rounded-lg hover:bg-brand-1/90 transition disabled:opacity-50"
+                  isLoading={createMutation.isPending}
+                  className="flex-1"
                 >
-                  {createMutation.isPending ? 'Creating...' : 'Create'}
-                </button>
+                  Create
+                </Button>
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Asset sidebar */}
       {selectedAsset && !selectedEdge && (
         <MapSidebar
           asset={selectedAsset}
@@ -494,7 +389,6 @@ const Page = () => {
         />
       )}
 
-      {/* Relationship sidebar */}
       {selectedEdge && !selectedAsset && (
         <RelationshipSidebar
           edge={selectedEdge}
@@ -507,15 +401,12 @@ const Page = () => {
               criticality: criticality as CriticalityLevel,
             })
           }}
-          onDelete={() => {
-            deleteMutation.mutate(selectedEdge.id)
-          }}
+          onDelete={() => deleteMutation.mutate(selectedEdge.id)}
           isLoading={updateMutation.isPending || deleteMutation.isPending}
           error={error}
         />
       )}
 
-      {/* CVE detail slide-over */}
       {selectedVuln && (
         <VulnDetailSlideOver
           vuln={selectedVuln}

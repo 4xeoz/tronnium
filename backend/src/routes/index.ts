@@ -8,6 +8,7 @@ import scanRouter from "./scan.routes";
 import aiRouter from "./ai.routes";
 import devRouter from "./dev.routes";
 import vulnerabilityWorkflowRouter from "./vulnerabilityWorkflow.routes";
+import dashboardRouter from "./dashboard.routes";
 
 export const apiRouter = Router();
 
@@ -24,3 +25,4 @@ apiRouter.use("/scans", scanRouter);
 apiRouter.use("/ai", aiRouter);
 apiRouter.use("/dev", devRouter);
 apiRouter.use("/vulnerability-workflow", vulnerabilityWorkflowRouter);
+apiRouter.use("/dashboard", dashboardRouter);

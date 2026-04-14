@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from "react";
 
 interface ProgressUpdate {
-  message?: any;
+  step?: string;
+  status?: string;
+  data?: unknown;
   type: "progress" | "completed" | "error";
 }
 
 interface CpeFinderProgressProps {
   assetName: string;
-  onComplete: (result: any) => void; // Callback when the process is complete
-  onError: (error: string) => void; // Callback when an error occurs
+  onComplete: (result: unknown) => void;
+  onError: (error: string) => void;
 }
 
 const CpeFinderProgress: React.FC<CpeFinderProgressProps> = ({ assetName, onComplete, onError }) => {
@@ -17,32 +19,26 @@ const CpeFinderProgress: React.FC<CpeFinderProgressProps> = ({ assetName, onComp
   useEffect(() => {
     const eventSource = new EventSource(`/api/cpe/find?assetName=${encodeURIComponent(assetName)}`);
 
-    // Listen for progress updates
     eventSource.onmessage = (event) => {
-      const data: ProgressUpdate = JSON.parse(event.data);
+      const data = JSON.parse(event.data) as ProgressUpdate & { step?: string; status?: string; data?: unknown };
 
       if (data.step === "Completed") {
-        // If the process is complete, call the onComplete callback
         onComplete(data.data);
         eventSource.close();
       } else if (data.step === "Error") {
-        // If an error occurs, call the onError callback
-        onError(data.data.error);
+        onError((data.data as { error?: string })?.error || "Unknown error");
         eventSource.close();
       } else {
-        // Update progress
         setProgress((prev) => [...prev, data]);
       }
     };
 
-    // Handle errors
     eventSource.onerror = () => {
       console.error("Error with SSE connection");
       eventSource.close();
       onError("Connection error. Please try again.");
     };
 
-    // Cleanup on component unmount
     return () => {
       eventSource.close();
     };
@@ -55,7 +51,7 @@ const CpeFinderProgress: React.FC<CpeFinderProgressProps> = ({ assetName, onComp
         {progress.map((p, index) => (
           <li key={index} className="mb-2">
             <strong>{p.step}:</strong> {p.status}
-            {p.data && <pre className="bg-gray-100 p-2 mt-1">{JSON.stringify(p.data, null, 2)}</pre>}
+            {p.data ? <pre className="bg-surface-secondary p-2 mt-1 rounded-[10px]">{JSON.stringify(p.data, null, 2)}</pre> : null}
           </li>
         ))}
       </ul>

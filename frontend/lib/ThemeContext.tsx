@@ -16,16 +16,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    // Check localStorage for saved theme preference
-    const savedTheme = localStorage.getItem("theme") as Theme | null;
-    if (savedTheme) {
-      setTheme(savedTheme);
-      document.documentElement.setAttribute("data-theme", savedTheme);
-    } else {
-      // Default to dark theme
-      document.documentElement.setAttribute("data-theme", "dark");
-    }
+    queueMicrotask(() => {
+      setMounted(true);
+      // Check localStorage for saved theme preference
+      const savedTheme = localStorage.getItem("theme") as Theme | null;
+      if (savedTheme) {
+        setTheme(savedTheme);
+        document.documentElement.setAttribute("data-theme", savedTheme);
+      } else {
+        // Default to dark theme
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    });
   }, []);
 
   const toggleTheme = () => {

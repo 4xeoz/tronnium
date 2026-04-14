@@ -12,7 +12,6 @@ import {
   FiCheckCircle,
   FiAlertCircle,
   FiAlertTriangle,
-  FiZap,
 } from "react-icons/fi";
 import {
   updateWorkflow,
@@ -26,6 +25,7 @@ import { requestSocAnalysis, type SocAnalysis, type ScanSeverity } from "@/lib/a
 import { useUser } from "@/lib/UserContext";
 import { AgeBadge } from "./SecurityUI";
 import { getDaysOpen } from "@/lib/vulnAge";
+import { STATUS_COLORS as SHARED_STATUS_COLORS, formatDate, getInitials } from "@/lib/securityConstants";
 
 // ============================================
 // TYPES
@@ -49,41 +49,25 @@ export type SelectedVuln = {
 // HELPERS
 // ============================================
 
-const STATUS_COLORS: Record<VulnStatus, { bg: string; text: string; border: string }> = {
-  OPEN:           { bg: "bg-error-bg",         text: "text-error-text",    border: "border-error-border" },
-  IN_PROGRESS:    { bg: "bg-warning-bg",        text: "text-warning-text",  border: "border-warning-border" },
-  RESOLVED:       { bg: "bg-success-bg",        text: "text-success-text",  border: "border-success-border" },
-  FALSE_POSITIVE: { bg: "bg-surface-secondary", text: "text-text-secondary",border: "border-border" },
-  RISK_ACCEPTED:  { bg: "bg-info-bg",           text: "text-info-text",     border: "border-info-border" },
-};
+const STATUS_COLORS = SHARED_STATUS_COLORS;
 
 const SEVERITY_TEXT: Record<string, string> = {
   CRITICAL: "text-error-text",
   HIGH:     "text-warning-text",
-  MEDIUM:   "text-yellow-500",
+  MEDIUM:   "text-warning-text",
   LOW:      "text-info-text",
   UNKNOWN:  "text-text-muted",
 };
-
-function formatDate(d: string | null | undefined) {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-}
-
-function getInitials(name: string | null | undefined) {
-  if (!name) return "?";
-  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-}
 
 // ============================================
 // URGENCY BADGE
 // ============================================
 
 const URGENCY_STYLES: Record<SocAnalysis["urgencyLevel"], string> = {
-  IMMEDIATE: "bg-red-500/15 text-red-400 border-red-500/30",
-  HIGH:      "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  MEDIUM:    "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-  LOW:       "bg-blue-500/15 text-blue-400 border-blue-500/30",
+  IMMEDIATE: "bg-error-bg text-error-text border-error-border",
+  HIGH:      "bg-warning-bg text-warning-text border-warning-border",
+  MEDIUM:    "bg-info-bg text-info-text border-info-border",
+  LOW:       "bg-success-bg text-success-text border-success-border",
 };
 
 function UrgencyBadge({ level }: { level: SocAnalysis["urgencyLevel"] }) {
@@ -127,7 +111,7 @@ function SOCAnalystSection({
       if (res.success && res.data) {
         setAnalysis(res.data);
       } else {
-        setError(res.error || "Failed to generate analysis");
+        setError(res.message || "Failed to generate analysis");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -319,7 +303,6 @@ export default function VulnDetailSlideOver({
   };
 
   const status = (workflow?.status || "OPEN") as VulnStatus;
-  const statusColors = STATUS_COLORS[status];
   const daysOpen = workflow?.firstSeenAt ? getDaysOpen(workflow.firstSeenAt) : null;
   const isOverdue = workflow?.dueDate && new Date(workflow.dueDate) < new Date() && status !== "RESOLVED";
 
