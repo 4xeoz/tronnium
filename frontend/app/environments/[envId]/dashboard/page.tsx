@@ -19,6 +19,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
+import { SEVERITY_ORDER } from "@/lib/securityConstants";
 
 const typeIcons: Record<string, React.ElementType> = {
   server: FiServer,
@@ -28,7 +29,7 @@ const typeIcons: Record<string, React.ElementType> = {
   unknown: FiCpu,
 };
 
-const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
+
 const SEVERITY_BADGE: Record<string, { variant: "error" | "warning" | "info" | "success"; text: string }> = {
   CRITICAL: { variant: "error", text: "CRIT" },
   HIGH:     { variant: "warning", text: "HIGH" },

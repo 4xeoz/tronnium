@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "../lib/prisma";
+import { verifyEnvironment } from "../lib/verifyEnvironment";
 import type { PublicUser } from "../types/express";
 
 /**
@@ -11,15 +12,6 @@ const VALID_TYPES = ["DEPENDS_ON", "CONTROLS", "PROVIDES_SERVICE", "SHARES_DATA_
 const VALID_CRITICALITIES = ["LOW", "MEDIUM", "HIGH"];
 
 /**
- * Verify environment belongs to authenticated user
- */
-async function verifyEnvironmentOwner(environmentId: string, userId: string) {
-  return prisma.environment.findFirst({
-    where: { id: environmentId, ownerId: userId },
-  });
-}
-
-/**
  * GET /relationships/:environmentId
  * Get all relationships for an environment
  */
@@ -28,12 +20,8 @@ export async function getRelationshipsHandler(req: Request, res: Response) {
     const { environmentId } = req.params;
     const user = req.user as PublicUser;
 
-    const env = await verifyEnvironmentOwner(environmentId, user.id);
-    if (!env) {
-      return res.status(404).json({
-        success: false,
-        message: "Environment not found",
-      });
+    if (!(await verifyEnvironment(user.id, environmentId))) {
+      return res.status(404).json({ success: false, error: "Environment not found" });
     }
 
     const relationships = await prisma.relationship.findMany({
@@ -99,12 +87,8 @@ export async function createRelationshipHandler(req: Request, res: Response) {
     }
 
     // Verify environment
-    const env = await verifyEnvironmentOwner(environmentId, user.id);
-    if (!env) {
-      return res.status(404).json({
-        success: false,
-        message: "Environment not found",
-      });
+    if (!(await verifyEnvironment(user.id, environmentId))) {
+      return res.status(404).json({ success: false, error: "Environment not found" });
     }
 
     // Verify both assets exist
@@ -202,12 +186,8 @@ export async function updateRelationshipHandler(req: Request, res: Response) {
     const { type, criticality } = req.body;
 
     // Verify environment
-    const env = await verifyEnvironmentOwner(environmentId, user.id);
-    if (!env) {
-      return res.status(404).json({
-        success: false,
-        message: "Environment not found",
-      });
+    if (!(await verifyEnvironment(user.id, environmentId))) {
+      return res.status(404).json({ success: false, error: "Environment not found" });
     }
 
     // Verify relationship exists
@@ -279,12 +259,8 @@ export async function deleteRelationshipHandler(req: Request, res: Response) {
     const user = req.user as PublicUser;
 
     // Verify environment
-    const env = await verifyEnvironmentOwner(environmentId, user.id);
-    if (!env) {
-      return res.status(404).json({
-        success: false,
-        message: "Environment not found",
-      });
+    if (!(await verifyEnvironment(user.id, environmentId))) {
+      return res.status(404).json({ success: false, error: "Environment not found" });
     }
 
     // Verify relationship exists

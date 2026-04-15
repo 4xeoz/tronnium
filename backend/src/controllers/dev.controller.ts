@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "../lib/prisma";
+import { verifyEnvironment } from "../lib/verifyEnvironment";
 import {
   generateMockVulnerabilities,
   clearMockVulnerabilities,
@@ -52,20 +53,8 @@ export async function generateVulnerabilitiesHandler(
       return;
     }
 
-    // Verify user owns the environment
-    const environment = await prisma.environment.findFirst({
-      where: {
-        id: environmentId,
-        ownerId: user.id,
-      },
-    });
-
-    if (!environment) {
-      res.status(404).json({
-        success: false,
-        error: "NOT_FOUND",
-        message: "Environment not found",
-      });
+    if (!(await verifyEnvironment(user.id, environmentId))) {
+      res.status(404).json({ success: false, error: "Environment not found" });
       return;
     }
 
@@ -119,20 +108,8 @@ export async function clearMockVulnerabilitiesHandler(
       return;
     }
 
-    // Verify user owns the environment
-    const environment = await prisma.environment.findFirst({
-      where: {
-        id: environmentId,
-        ownerId: user.id,
-      },
-    });
-
-    if (!environment) {
-      res.status(404).json({
-        success: false,
-        error: "NOT_FOUND",
-        message: "Environment not found",
-      });
+    if (!(await verifyEnvironment(user.id, environmentId))) {
+      res.status(404).json({ success: false, error: "Environment not found" });
       return;
     }
 
@@ -165,20 +142,8 @@ export async function getMockVulnerabilitiesHandler(
     const { environmentId } = req.params;
     const user = req.user as PublicUser;
 
-    // Verify user owns the environment
-    const environment = await prisma.environment.findFirst({
-      where: {
-        id: environmentId,
-        ownerId: user.id,
-      },
-    });
-
-    if (!environment) {
-      res.status(404).json({
-        success: false,
-        error: "NOT_FOUND",
-        message: "Environment not found",
-      });
+    if (!(await verifyEnvironment(user.id, environmentId))) {
+      res.status(404).json({ success: false, error: "Environment not found" });
       return;
     }
 
@@ -211,20 +176,8 @@ export async function getMockVulnerabilityStatsHandler(
     const { environmentId } = req.params;
     const user = req.user as PublicUser;
 
-    // Verify user owns the environment
-    const environment = await prisma.environment.findFirst({
-      where: {
-        id: environmentId,
-        ownerId: user.id,
-      },
-    });
-
-    if (!environment) {
-      res.status(404).json({
-        success: false,
-        error: "NOT_FOUND",
-        message: "Environment not found",
-      });
+    if (!(await verifyEnvironment(user.id, environmentId))) {
+      res.status(404).json({ success: false, error: "Environment not found" });
       return;
     }
 

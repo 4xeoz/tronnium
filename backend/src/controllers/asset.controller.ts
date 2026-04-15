@@ -3,6 +3,7 @@ import { cpe } from "../services/cpe";
 import { rankCpeCandidates } from "../services/cpeRankingEngine";
 import type { CpeCandidate } from "../types/cpe.types";
 import prisma from "../lib/prisma";
+import { verifyEnvironment } from "../lib/verifyEnvironment";
 import type { PublicUser } from "../types/express";
 import { ScanStatus } from "@prisma/client";
 
@@ -275,20 +276,8 @@ export async function getAssetsHandler(req: Request, res: Response) {
         const user = req.user as PublicUser;
 
 
-        // Verify environment belongs to user
-        const environment = await prisma.environment.findFirst({
-            where: {
-                id: environmentId,
-                ownerId: user.id,
-            },
-        });
-
-        if (!environment) {
-            return res.status(404).json({
-                success: false,
-                error: "NOT_FOUND",
-                message: "Environment not found",
-            });
+        if (!(await verifyEnvironment(user.id, environmentId))) {
+            return res.status(404).json({ success: false, error: "Environment not found" });
         }
 
         const assets = await prisma.asset.findMany({
@@ -360,19 +349,8 @@ export async function createAssetHandler(req: Request, res: Response) {
             });
         }
 
-        // Verify environment belongs to user
-        const environment = await prisma.environment.findFirst({
-            where: {
-                id: environmentId,
-                ownerId: user.id,
-            },
-        });
-
-        if (!environment) {
-            return res.status(404).json({
-                success: false,
-                message: "Environment not found",
-            });
+        if (!(await verifyEnvironment(user.id, environmentId))) {
+            return res.status(404).json({ success: false, error: "Environment not found" });
         }
 
         // CPEs are trusted since they were displayed by the backend and selected by user
@@ -434,37 +412,17 @@ export async function deleteAssetHandler(req: Request, res: Response) {
         }
 
 
-        // Verify environment belongs to user
-        const environment = await prisma.environment.findFirst({
-            where: {
-                id: environmentId,
-                ownerId: user.id,
-
-            }
-        });
-
-        if (!environment) {
-            return res.status(404).json({
-                success: false,
-                error: "NOT_FOUND",
-                message: "Environment not found",
-            });
+        if (!(await verifyEnvironment(user.id, environmentId))) {
+            return res.status(404).json({ success: false, error: "Environment not found" });
         }
 
         // Verify asset belongs to environment
         const asset = await prisma.asset.findFirst({
-            where: { 
-                id: assetId, 
-                environmentId: environmentId, 
-            },
-        }); 
-        
-        if (!asset) { 
-        
-            return res.status(404).json({ 
-                success: false, 
-                message: "Asset not found in this environment"
-            }); 
+            where: { id: assetId, environmentId },
+        });
+
+        if (!asset) {
+            return res.status(404).json({ success: false, error: "Asset not found in this environment" });
         }
 
         // Delete the Asset
@@ -492,32 +450,16 @@ export async function updateAssetHandler(req: Request, res: Response) {
 
         console.log(`[Update Asset] User ${user.id} updating asset ${assetId} in environment ${environmentId} with data:`, req.body);
 
-       // authorization checks (same as delete handler)
-         const environment = await prisma.environment.findFirst({
-          where: {
-                id: environmentId,
-                ownerId: user.id,
-          },
-     });
-        if (!environment) {
-            return res.status(404).json({
-                success: false,
-                message: "Environment not found",
-            });
+        if (!(await verifyEnvironment(user.id, environmentId))) {
+            return res.status(404).json({ success: false, error: "Environment not found" });
         }
 
         const asset = await prisma.asset.findFirst({
-            where: { 
-                id: assetId, 
-                environmentId: environmentId, 
-            },
+            where: { id: assetId, environmentId },
         });
-        
+
         if (!asset) {
-            return res.status(404).json({
-                success: false,
-                message: "Asset not found in this environment",
-            });
+            return res.status(404).json({ success: false, error: "Asset not found in this environment" });
         }
 
         // Prepare update data
@@ -572,28 +514,13 @@ export async function getAssetVulnerabilitiesHandler(req: Request, res: Response
             });
         }
 
-        // Verify environment belongs to user
-        const environment = await prisma.environment.findFirst({
-            where: {
-                id: environmentId,
-                ownerId: user.id,
-            },
-        });
-
-        if (!environment) {
-            return res.status(404).json({
-                success: false,
-                error: "NOT_FOUND",
-                message: "Environment not found",
-            });
+        if (!(await verifyEnvironment(user.id, environmentId))) {
+            return res.status(404).json({ success: false, error: "Environment not found" });
         }
 
         // Verify asset belongs to environment
         const asset = await prisma.asset.findFirst({
-            where: {
-                id: assetId,
-                environmentId: environmentId,
-            },
+            where: { id: assetId, environmentId },
         });
 
         if (!asset) {

@@ -6,6 +6,10 @@ import type { ScanSeverity } from "@/lib/api";
 
 export const INACTIVE_STATUSES = new Set<VulnStatus>(["RESOLVED", "FALSE_POSITIVE", "RISK_ACCEPTED"]);
 
+export const SEVERITY_ORDER: Record<string, number> = {
+  CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0,
+};
+
 export const SEVERITY_CONFIG: Record<ScanSeverity, { bg: string; bgLight: string; border: string; text: string; label: string }> = {
   CRITICAL: { bg: "bg-error-text", bgLight: "bg-error-bg", border: "border-error-border", text: "text-error-text", label: "Critical" },
   HIGH:     { bg: "bg-warning-text", bgLight: "bg-warning-bg", border: "border-warning-border", text: "text-warning-text", label: "High" },

@@ -37,6 +37,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 import { updateAseetPosition } from '@/lib/api/assets'
 import { Button } from '@/components/ui/Button'
+import { INACTIVE_STATUSES } from '@/lib/securityConstants'
 
 export type VulnSummary = {
   critical: number;
@@ -51,7 +52,6 @@ const EMPTY_VULN_SUMMARY: VulnSummary = { critical: 0, high: 0, medium: 0, low: 
 
 const nodeTypes = { asset: AssetNode }
 const edgeTypes = { dependency: DependencyEdge }
-const INACTIVE_STATUSES = new Set(['RESOLVED', 'FALSE_POSITIVE', 'RISK_ACCEPTED'])
 
 const Page = () => {
   const params = useParams()

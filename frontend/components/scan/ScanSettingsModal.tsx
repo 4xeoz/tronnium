@@ -10,6 +10,7 @@ import {
   FiArrowRight,
 } from "react-icons/fi";
 import { getScanSettings, type ScanSettings, type ScanFromDateOption } from "@/lib/api/scans";
+import { formatDateTime } from "@/lib/utils/format";
 
 interface ScanSettingsModalProps {
   environmentId: string;
@@ -114,18 +115,7 @@ export default function ScanSettingsModal({
     onClose();
   };
 
-  const formatDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return "Never";
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const getDaysSinceLastScan = (): number | null => {
+const getDaysSinceLastScan = (): number | null => {
     if (!settings?.lastScanDate) return null;
     const diff = Date.now() - new Date(settings.lastScanDate).getTime();
     return Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -206,7 +196,7 @@ export default function ScanSettingsModal({
                     <span className="text-sm font-medium text-text-primary">Last Scan</span>
                   </div>
                   <p className="text-sm text-text-secondary">
-                    {formatDate(settings.lastScanDate)}
+                    {formatDateTime(settings.lastScanDate)}
                     {daysSince !== null && (
                       <span className="text-text-muted">
                         {" "}(
@@ -241,7 +231,7 @@ export default function ScanSettingsModal({
                         <div className="flex-1">
                           <p className="font-medium text-text-primary">Since Last Scan</p>
                           <p className="text-sm text-text-secondary mt-0.5">
-                            Only new CVEs published since {formatDate(settings.lastScanDate)}
+                            Only new CVEs published since {formatDateTime(settings.lastScanDate)}
                           </p>
                         </div>
                       </div>
@@ -301,7 +291,7 @@ export default function ScanSettingsModal({
                               </p>
                             )}
                             <p className="text-xs text-text-muted mt-1.5">
-                              Max lookback: {formatDate(settings?.maxLookbackDate)}
+                              Max lookback: {formatDateTime(settings?.maxLookbackDate)}
                             </p>
                           </div>
                         )}

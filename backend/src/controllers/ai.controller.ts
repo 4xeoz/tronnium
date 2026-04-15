@@ -1,13 +1,9 @@
 import type { Request, Response } from "express";
-import prisma from "../lib/prisma";
-import { getLatestScan } from "../services/scane.service";
-import {
-	explainCve,
-	analyzeSocContext,
-	analyzeEnvironment,
-	type SocAnalysisInput,
-	type AssetScanEntry,
-} from "../services/cveExplain.service";
+import { getLatestScan } from "../services/scan.service";
+import { verifyEnvironment } from "../lib/verifyEnvironment";
+import { explainCve } from "../services/cveExplain.service";
+import { analyzeSocContext, type SocAnalysisInput } from "../services/socAnalysis.service";
+import { analyzeEnvironment, type AssetScanEntry } from "../services/environmentBriefing.service";
 
 /**
  * POST /ai/explain-cve
@@ -89,11 +85,7 @@ export async function environmentBriefingHandler(req: Request, res: Response): P
 	}
 
 	try {
-		// Verify the user owns this environment
-		const environment = await prisma.environment.findFirst({
-			where: { id: environmentId, ownerId: userId },
-		});
-		if (!environment) {
+		if (!(await verifyEnvironment(userId!, environmentId))) {
 			res.status(404).json({ success: false, error: "Environment not found" });
 			return;
 		}

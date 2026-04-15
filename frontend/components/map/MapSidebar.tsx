@@ -8,6 +8,7 @@ import { Asset } from '@/lib/api'
 import { getWorkflows, type WorkflowItem, getStatusLabel, type VulnStatus } from '@/lib/api/vulnerabilityWorkflow'
 import { AgeBadge, Badge } from '@/components/security/SecurityUI'
 import type { SelectedVuln } from '@/components/security/VulnDetailSlideOver'
+import { SEVERITY_ORDER, STATUS_COLORS, getInitials } from '@/lib/securityConstants'
 
 interface MapSidebarProps {
   asset: Asset | null;
@@ -26,18 +27,6 @@ const typeIcons: Record<string, React.ElementType> = {
   unknown:  FiCpu,
 }
 
-const SEVERITY_ORDER: Record<string, number> = {
-  CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0,
-}
-
-const STATUS_COLORS: Record<VulnStatus, { bg: string; text: string }> = {
-  OPEN:           { bg: "bg-error-bg",         text: "text-error-text" },
-  IN_PROGRESS:    { bg: "bg-warning-bg",        text: "text-warning-text" },
-  RESOLVED:       { bg: "bg-success-bg",        text: "text-success-text" },
-  FALSE_POSITIVE: { bg: "bg-surface-secondary", text: "text-text-muted" },
-  RISK_ACCEPTED:  { bg: "bg-info-bg",           text: "text-info-text" },
-}
-
 function DetailRow({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null
   return (
@@ -46,11 +35,6 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
       <p className="text-xs text-text-primary">{value}</p>
     </div>
   )
-}
-
-function getInitials(name: string | null | undefined) {
-  if (!name) return "?"
-  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
 }
 
 export default function MapSidebar({ asset, environmentId, onClose, onVulnClick, onWorkflowsLoaded }: MapSidebarProps) {

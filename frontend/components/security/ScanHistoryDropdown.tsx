@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState } from "react";
 import { FiChevronDown, FiCheck, FiClock, FiTrash2, FiX } from "react-icons/fi";
 import type { ScanHistoryItem } from "@/lib/api";
+import { formatDateTime } from "@/lib/utils/format";
 
 type Props = {
   scanHistory: ScanHistoryItem[];
@@ -13,14 +14,7 @@ type Props = {
 };
 
 function formatDropdownDate(value: string | null): string {
-  if (!value) return "In progress";
-  return new Date(value).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return value ? formatDateTime(value) : "In progress";
 }
 
 export default function ScanHistoryDropdown({
