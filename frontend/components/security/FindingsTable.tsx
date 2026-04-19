@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import {
   FiExternalLink, FiEye, FiChevronLeft, FiChevronRight,
-  FiServer, FiMonitor, FiHardDrive, FiCpu, FiLayers,
   FiCheck, FiFlag, FiZap, FiPackage,
 } from "react-icons/fi";
 import { Badge } from "@/components/security/SecurityUI";
@@ -11,13 +10,10 @@ import { AgeBadge } from "@/components/security/SecurityUI";
 import { Button } from "@/components/ui/Button";
 import { AIExplainButton } from "@/components/ui/AIExplainButton";
 import { getStatusLabel, VULN_STATUSES, type WorkflowItem, type VulnStatus } from "@/lib/api/vulnerabilityWorkflow";
-import { SEVERITY_CONFIG, STATUS_COLORS, INACTIVE_STATUSES } from "@/lib/securityConstants";
+import { SEVERITY_CONFIG, STATUS_COLORS, INACTIVE_STATUSES, typeIcons } from "@/lib/securityConstants";
 import type { AssetScan as AssetScanItem } from "@/lib/api";
 import type { SelectedVuln } from "@/components/security/VulnDetailSlideOver";
 
-const typeIcons: Record<string, React.ElementType> = {
-  server: FiServer, workstation: FiMonitor, storage: FiHardDrive, iot: FiCpu, unknown: FiLayers,
-};
 
 type SortKey = "cvss" | "age" | "asset" | "severity";
 type SortDir = "asc" | "desc";
@@ -133,8 +129,8 @@ export default function FindingsTable({
     return (
       <button
         onClick={() => {
-          if (active) setSortDir(d => d === "asc" ? "desc" : "asc");
-          else { setSortKey(k); setSortDir("desc"); }
+          if (active) { setSortDir(d => d === "asc" ? "desc" : "asc"); }
+          else { setSortKey(k); setSortDir("desc"); setPage(1); }
         }}
         className={`flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.5px] ${active ? "text-text-primary" : "text-text-muted hover:text-text-secondary"}`}
       >

@@ -3,17 +3,13 @@
 import { useMemo } from "react";
 import {
   FiFlag, FiCheckCircle, FiBarChart2,
-  FiServer, FiMonitor, FiHardDrive, FiCpu, FiLayers,
   FiAlertTriangle,
 } from "react-icons/fi";
 import { type WorkflowItem } from "@/lib/api/vulnerabilityWorkflow";
 import { Card, SectionHeader, StatCard } from "./SecurityUI";
-import { INACTIVE_STATUSES } from "@/lib/securityConstants";
+import { INACTIVE_STATUSES, typeIcons } from "@/lib/securityConstants";
 import type { AssetScan as AssetScanItem, ScanHistoryItem } from "@/lib/api";
 
-const typeIcons: Record<string, React.ElementType> = {
-  server: FiServer, workstation: FiMonitor, storage: FiHardDrive, iot: FiCpu, unknown: FiLayers,
-};
 
 function RiskSentence({
   total,

@@ -24,7 +24,6 @@ import { useUser } from "@/lib/UserContext";
 import { AgeBadge } from "./SecurityUI";
 import { getDaysOpen } from "@/lib/vulnAge";
 import { STATUS_COLORS as SHARED_STATUS_COLORS, formatDate, getInitials } from "@/lib/securityConstants";
-import { UrgencyBadge } from "./UrgencyBadge";
 import { SOCAnalystSection } from "./SOCAnalystSection";
 
 export type SelectedVuln = {
@@ -52,7 +51,6 @@ const SEVERITY_TEXT: Record<string, string> = {
 };
 
 
-
 export default function VulnDetailSlideOver({
   vuln,
   workflow: initialWorkflow,
@@ -74,6 +72,13 @@ export default function VulnDetailSlideOver({
     initialWorkflow?.dueDate ? initialWorkflow.dueDate.split("T")[0] : ""
   );
   const notesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear pending debounce on unmount to prevent state updates after unmount
+  useEffect(() => {
+    return () => {
+      if (notesDebounceRef.current) clearTimeout(notesDebounceRef.current);
+    };
+  }, []);
 
   // Sync state when the selected vuln changes
   useEffect(() => {

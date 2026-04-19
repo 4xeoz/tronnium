@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
-import { environmentService } from "./environment.service";
-import type { PublicUser } from "../../types/user.types";
-import { ok, err } from "../../lib/response-helpers";
+import { environmentService } from "../services/environment.service";
+import type { PublicUser } from "../services/user.service";
 
 /**
  * Create a new environment
@@ -9,15 +8,15 @@ import { ok, err } from "../../lib/response-helpers";
  */
 export async function createEnvironmentHandler(req: Request, res: Response) {
   const user = req.user as PublicUser;
-
+  
   if (!user) {
-    return res.status(401).json(err("UNAUTHORIZED", "Not authenticated."));
+    return res.status(401).json({ success: false,  message: "Not authenticated." });
   }
 
   const { name, description, labels } = req.body;
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
-    return res.status(400).json(err("INVALID_INPUT", "Name is required."));
+    return res.status(400).json({success: false ,  message: "Name is required." });
   }
 
   try {
@@ -27,12 +26,10 @@ export async function createEnvironmentHandler(req: Request, res: Response) {
       labels: Array.isArray(labels) ? labels : [],
     });
 
-    return res.status(201).json(
-      ok(environmentService.toPublic(environment), "Environment created successfully.")
-    );
+    return res.status(201).json(environmentService.toPublic(environment));
   } catch (error) {
     console.error("Error creating environment:", error);
-    return res.status(500).json(err("CREATE_FAILED", "Failed to create environment."));
+    return res.status(500).json({ success: false, message: "Failed to create environment." });
   }
 }
 
@@ -41,18 +38,20 @@ export async function createEnvironmentHandler(req: Request, res: Response) {
  * GET /environments
  */
 export async function getEnvironmentsHandler(req: Request, res: Response) {
+  
+
   try {
     const user = req.user as PublicUser;
 
-    if (!user) {
-      return res.status(401).json(err("UNAUTHORIZED", "Not authenticated."));
-    }
-
+  if (!user) {
+    return res.status(401).json({ message: "Not authenticated." });
+  }
+  
     const environments = await environmentService.findAllByOwnerWithAssetCount(user.id);
-    return res.json(ok(environments, "Environments fetched successfully."));
+    return res.json({ success: true, data: environments, message: "Environments fetched successfully." });
   } catch (error) {
     console.error("Error fetching environments:", error);
-    return res.status(500).json(err("FETCH_FAILED", "Failed to fetch environments."));
+    return res.status(500).json({ message: "Failed to fetch environments." });
   }
 }
 
@@ -65,22 +64,20 @@ export async function getEnvironmentByIdHandler(req: Request, res: Response) {
   const { id } = req.params;
 
   if (!user) {
-    return res.status(401).json(err("UNAUTHORIZED", "Not authenticated."));
+    return res.status(401).json({success: false, message: "Not authenticated." });
   }
 
   try {
     const environment = await environmentService.findByIdAndOwner(id, user.id);
 
     if (!environment) {
-      return res.status(404).json(err("NOT_FOUND", "Environment not found."));
+      return res.status(404).json({ success: false, message: "Environment not found." });
     }
 
-    return res.json(
-      ok(environmentService.toPublic(environment), "Environment fetched successfully.")
-    );
+    return res.json({ success: true, data: environmentService.toPublic(environment), message: "Environment fetched successfully." });
   } catch (error) {
     console.error("Error fetching environment:", error);
-    return res.status(500).json(err("FETCH_FAILED", "Failed to fetch environment."));
+    return res.status(500).json({ message: "Failed to fetch environment." });
   }
 }
 
@@ -94,7 +91,7 @@ export async function updateEnvironmentHandler(req: Request, res: Response) {
   const { name, description, labels } = req.body;
 
   if (!user) {
-    return res.status(401).json(err("UNAUTHORIZED", "Not authenticated."));
+    return res.status(401).json({ message: "Not authenticated." });
   }
 
   try {
@@ -105,15 +102,13 @@ export async function updateEnvironmentHandler(req: Request, res: Response) {
     });
 
     if (!updated) {
-      return res.status(404).json(err("NOT_FOUND", "Environment not found."));
+      return res.status(404).json({ message: "Environment not found." });
     }
 
-    return res.json(
-      ok(environmentService.toPublic(updated), "Environment updated successfully.")
-    );
+    return res.json(environmentService.toPublic(updated));
   } catch (error) {
     console.error("Error updating environment:", error);
-    return res.status(500).json(err("UPDATE_FAILED", "Failed to update environment."));
+    return res.status(500).json({ message: "Failed to update environment." });
   }
 }
 
@@ -126,19 +121,19 @@ export async function deleteEnvironmentHandler(req: Request, res: Response) {
   const { id } = req.params;
 
   if (!user) {
-    return res.status(401).json(err("UNAUTHORIZED", "Not authenticated."));
+    return res.status(401).json({ message: "Not authenticated." });
   }
 
   try {
     const deleted = await environmentService.delete(id, user.id);
 
     if (!deleted) {
-      return res.status(404).json(err("NOT_FOUND", "Environment not found."));
+      return res.status(404).json({ message: "Environment not found." });
     }
 
-    return res.json(ok(null, "Environment deleted."));
+    return res.json({ success: true, message: "Environment deleted." });
   } catch (error) {
     console.error("Error deleting environment:", error);
-    return res.status(500).json(err("DELETE_FAILED", "Failed to delete environment."));
+    return res.status(500).json({ message: "Failed to delete environment." });
   }
 }

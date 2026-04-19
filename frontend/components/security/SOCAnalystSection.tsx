@@ -52,7 +52,6 @@ export function SOCAnalystSection({
     }
   }, [vuln, assetType]);
 
-  // Trigger button — shown before analysis is loaded
   if (!analysis && !isLoading && !error) {
     return (
       <button
@@ -86,7 +85,6 @@ export function SOCAnalystSection({
 
   return (
     <div className="space-y-4">
-      {/* Urgency + model */}
       <div className="flex items-center justify-between">
         <UrgencyBadge level={analysis!.urgencyLevel} />
         {analysis!.model !== "stub" && (
@@ -94,27 +92,18 @@ export function SOCAnalystSection({
         )}
       </div>
 
-      {/* System Impact */}
       <div>
-        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">
-          System Impact
-        </h4>
+        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">System Impact</h4>
         <p className="text-sm text-text-secondary leading-relaxed">{analysis!.systemImpact}</p>
       </div>
 
-      {/* Attack Scenario */}
       <div>
-        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">
-          Attack Scenario
-        </h4>
+        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">Attack Scenario</h4>
         <p className="text-sm text-text-secondary leading-relaxed">{analysis!.attackScenario}</p>
       </div>
 
-      {/* Remediation Steps */}
       <div>
-        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">
-          Remediation Steps
-        </h4>
+        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">Remediation Steps</h4>
         <ol className="space-y-1.5">
           {analysis!.remediationSteps.map((step, i) => (
             <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
@@ -127,11 +116,8 @@ export function SOCAnalystSection({
         </ol>
       </div>
 
-      {/* Industry Guidance */}
       <div>
-        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">
-          Industry Guidance
-        </h4>
+        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">Industry Guidance</h4>
         <p className="text-sm text-text-secondary leading-relaxed">{analysis!.industryGuidance}</p>
       </div>
     </div>

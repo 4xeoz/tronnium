@@ -128,9 +128,9 @@ export default function MapSidebar({ asset, environmentId, onClose, onVulnClick,
                       description: wf.description,
                       severity: wf.severity,
                       cvssScore: wf.cvssScore,
-                      cvssVector: null,
-                      publishedDate: null,
-                      lastModifiedDate: null,
+                      cvssVector: wf.cvssVector,
+                      publishedDate: wf.publishedDate,
+                      lastModifiedDate: wf.lastModifiedDate,
                       assetName: asset.name,
                     })}
                     className="w-full text-left bg-background-secondary hover:bg-surface rounded-[10px] p-2.5 transition-colors border border-transparent hover:border-border"
