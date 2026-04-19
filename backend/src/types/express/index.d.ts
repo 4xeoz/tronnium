@@ -1,4 +1,4 @@
-import type { PublicUser } from "../../services/user.service";
+import type { PublicUser } from "../../types/user.types";
 
 declare global {
   namespace Express {

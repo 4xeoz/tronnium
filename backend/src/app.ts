@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import passport from "passport";
-import { configurePassport } from "./auth/passport";
+import { configurePassport } from "./modules/authentication/passport";
 import { apiRouter } from "./routes";
 
 export function createApp() {

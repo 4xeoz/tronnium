@@ -34,7 +34,7 @@ type SelectedAsset = {
   cpeDisplay?: string;
 };
 
-type CpeItem = string | { cpeName: string; title?: string; score?: number };
+type CpeItem = { cpeName: string; title?: string; score?: number };
 
 function AIVulnGenerator() {
   const params = useParams();
@@ -75,23 +75,15 @@ function AIVulnGenerator() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const getCpes = (asset: Asset): CpeItem[] => {
-    if (!asset.cpes) return [];
-    if (Array.isArray(asset.cpes)) return asset.cpes as CpeItem[];
-    try {
-      const parsed = JSON.parse(asset.cpes);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
+    return Array.isArray(asset.cpes) ? (asset.cpes as CpeItem[]) : [];
   };
 
   const getCpeDisplayName = (cpe: CpeItem): string => {
-    if (typeof cpe === 'string') return cpe;
     return cpe.cpeName || 'Unknown CPE';
   };
 
   const toggleAsset = (asset: Asset, cpe?: CpeItem) => {
-    const cpeId = cpe ? (typeof cpe === 'string' ? cpe : cpe.cpeName) : undefined;
+    const cpeId = cpe ? cpe.cpeName : undefined;
     setSelectedAssets(prev => {
       const exists = prev.some(s => s.assetId === asset.id && s.cpeIdentifier === cpeId);
       if (exists) {
@@ -102,7 +94,7 @@ function AIVulnGenerator() {
   };
 
   const isSelected = (assetId: string, cpe?: CpeItem) => {
-    const cpeId = cpe ? (typeof cpe === 'string' ? cpe : cpe.cpeName) : undefined;
+    const cpeId = cpe ? cpe.cpeName : undefined;
     return selectedAssets.some(s => s.assetId === assetId && s.cpeIdentifier === cpeId);
   };
 

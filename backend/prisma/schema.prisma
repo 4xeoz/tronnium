@@ -121,8 +121,8 @@ model Asset {
   serialNumber  String?     // Serial number or asset tag
 
   // CPEs selected by user with full metadata (score, breakdown, cpeNameId)
-  // JSON array of: { cpeName, cpeNameId, title, score, breakdown: { vendor, product, version, tokenOverlap } }
-  cpes          Json        @default("[]")
+  // Related AssetCpe records with deconstruction and ranking metadata
+  cpes          AssetCpe[]  
 
   // Optional tags for organization
   tags          String[]    @default([])
@@ -140,6 +140,34 @@ model Asset {
 
   relationshipsFrom Relationship[] @relation("FromAsset")
   relationshipsTo   Relationship[] @relation("ToAsset")
+}
+
+
+model AssetCpe {
+  id String @id @default(uuid()) @db.Uuid
+  assetId String @db.Uuid
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  cpeName String
+  cpeNameId String?
+  title String
+  score Float
+
+  vendor String?
+  product String?
+  version String?
+
+  vendorScore Float?
+  productScore Float?
+  versionScore Float?
+  tokenOverlapScore Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([assetId])
+  @@index([cpeName])
+  @@unique([assetId, cpeName])
 }
 
 model Relationship {

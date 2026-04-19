@@ -201,9 +201,8 @@ export default function AssetDetailsSlideOver({
       })
       .catch((error) => {
         console.error("Failed to delete asset:", error);
-        console.error("Error response:", error.response?.data);
-        console.error("Error status:", error.response?.status);
-        alert("Failed to delete asset. Please try again.");
+        const msg = error instanceof Error ? error.message : "Failed to delete asset. Please try again.";
+        alert(msg);
       });
   };
 

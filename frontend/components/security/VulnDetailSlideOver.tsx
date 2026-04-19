@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   FiX,
   FiExternalLink,
@@ -10,8 +10,6 @@ import {
   FiFileText,
   FiClock,
   FiCheckCircle,
-  FiAlertCircle,
-  FiAlertTriangle,
 } from "react-icons/fi";
 import {
   updateWorkflow,
@@ -21,15 +19,13 @@ import {
   type WorkflowItem,
   type VulnStatus,
 } from "@/lib/api/vulnerabilityWorkflow";
-import { requestSocAnalysis, type SocAnalysis, type ScanSeverity } from "@/lib/api";
+import type { ScanSeverity } from "@/lib/api";
 import { useUser } from "@/lib/UserContext";
 import { AgeBadge } from "./SecurityUI";
 import { getDaysOpen } from "@/lib/vulnAge";
 import { STATUS_COLORS as SHARED_STATUS_COLORS, formatDate, getInitials } from "@/lib/securityConstants";
-
-// ============================================
-// TYPES
-// ============================================
+import { UrgencyBadge } from "./UrgencyBadge";
+import { SOCAnalystSection } from "./SOCAnalystSection";
 
 export type SelectedVuln = {
   vulnerabilityId: string;
@@ -45,10 +41,6 @@ export type SelectedVuln = {
   assetName: string;
 };
 
-// ============================================
-// HELPERS
-// ============================================
-
 const STATUS_COLORS = SHARED_STATUS_COLORS;
 
 const SEVERITY_TEXT: Record<string, string> = {
@@ -59,156 +51,7 @@ const SEVERITY_TEXT: Record<string, string> = {
   UNKNOWN:  "text-text-muted",
 };
 
-// ============================================
-// URGENCY BADGE
-// ============================================
 
-const URGENCY_STYLES: Record<SocAnalysis["urgencyLevel"], string> = {
-  IMMEDIATE: "bg-error-bg text-error-text border-error-border",
-  HIGH:      "bg-warning-bg text-warning-text border-warning-border",
-  MEDIUM:    "bg-info-bg text-info-text border-info-border",
-  LOW:       "bg-success-bg text-success-text border-success-border",
-};
-
-function UrgencyBadge({ level }: { level: SocAnalysis["urgencyLevel"] }) {
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border ${URGENCY_STYLES[level]}`}>
-      <FiAlertTriangle className="w-3 h-3" />
-      {level}
-    </span>
-  );
-}
-
-// ============================================
-// AI SOC ANALYST SECTION
-// ============================================
-
-function SOCAnalystSection({
-  vuln,
-  assetType,
-}: {
-  vuln: SelectedVuln;
-  assetType: string;
-}) {
-  const [analysis, setAnalysis] = useState<SocAnalysis | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const runAnalysis = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await requestSocAnalysis({
-        cveId: vuln.cveId,
-        description: vuln.description,
-        severity: vuln.severity,
-        cvssScore: vuln.cvssScore,
-        cvssVector: vuln.cvssVector,
-        assetName: vuln.assetName,
-        assetType,
-        cpeName: vuln.cpeName,
-      });
-      if (res.success && res.data) {
-        setAnalysis(res.data);
-      } else {
-        setError(res.message || "Failed to generate analysis");
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [vuln, assetType]);
-
-  // Trigger button — shown before analysis is loaded
-  if (!analysis && !isLoading && !error) {
-    return (
-      <button
-        onClick={runAnalysis}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 hover:border-indigo-500/50 rounded-lg transition-all"
-      >
-        <FiShield className="w-3.5 h-3.5" />
-        Run SOC Analysis
-      </button>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 text-text-muted text-sm">
-        <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-        Analyzing system context...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center gap-2 text-error-text text-sm">
-        <FiAlertCircle className="w-4 h-4 shrink-0" />
-        <span>{error}</span>
-        <button onClick={runAnalysis} className="underline ml-1 shrink-0">Retry</button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Urgency + model */}
-      <div className="flex items-center justify-between">
-        <UrgencyBadge level={analysis!.urgencyLevel} />
-        {analysis!.model !== "stub" && (
-          <span className="text-xs text-text-muted">Powered by {analysis!.model}</span>
-        )}
-      </div>
-
-      {/* System Impact */}
-      <div>
-        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">
-          System Impact
-        </h4>
-        <p className="text-sm text-text-secondary leading-relaxed">{analysis!.systemImpact}</p>
-      </div>
-
-      {/* Attack Scenario */}
-      <div>
-        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">
-          Attack Scenario
-        </h4>
-        <p className="text-sm text-text-secondary leading-relaxed">{analysis!.attackScenario}</p>
-      </div>
-
-      {/* Remediation Steps */}
-      <div>
-        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">
-          Remediation Steps
-        </h4>
-        <ol className="space-y-1.5">
-          {analysis!.remediationSteps.map((step, i) => (
-            <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
-              <span className="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                {i + 1}
-              </span>
-              {step}
-            </li>
-          ))}
-        </ol>
-      </div>
-
-      {/* Industry Guidance */}
-      <div>
-        <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-1">
-          Industry Guidance
-        </h4>
-        <p className="text-sm text-text-secondary leading-relaxed">{analysis!.industryGuidance}</p>
-      </div>
-    </div>
-  );
-}
-
-// ============================================
-// MAIN SLIDE-OVER
-// ============================================
 
 export default function VulnDetailSlideOver({
   vuln,

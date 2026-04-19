@@ -10,7 +10,7 @@ export type ScanStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "FAILED";
 export type ScanSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
 
 export type ScanResult = {
-  scanId: string;
+  id: string;
   status: ScanStatus;
   totalAssets: number;
   scannedAssets: number;
