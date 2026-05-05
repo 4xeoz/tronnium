@@ -47,7 +47,9 @@ model UserAccount {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  // environments   Environment[]
+  // Vulnerability remediation assignments
+  assignedVulnerabilities VulnerabilityWorkflow[] @relation("AssignedVulnerabilities")
+  resolvedVulnerabilities VulnerabilityWorkflow[] @relation("ResolvedVulnerabilities")
 
   @@index([createdAt])
   environments Environment[]
@@ -78,6 +80,7 @@ model Environment {
 
   assets          Asset[]
   SecurityScans    SecurityScan[]
+  vulnerabilityWorkflows VulnerabilityWorkflow[]
 
   @@index([ownerId])
   relationships Relationship[]
@@ -118,13 +121,14 @@ model Asset {
   serialNumber  String?     // Serial number or asset tag
 
   // CPEs selected by user with full metadata (score, breakdown, cpeNameId)
-  // JSON array of: { cpeName, cpeNameId, title, score, breakdown: { vendor, product, version, tokenOverlap } }
-  cpes          Json        @default("[]")
+  // Related AssetCpe records with deconstruction and ranking metadata
+  cpes          AssetCpe[]  
 
   // Optional tags for organization
   tags          String[]    @default([])
 
   assetScans     AssetScan[] // Vulnerability scan results for this asset
+  vulnerabilityWorkflows VulnerabilityWorkflow[] // Remediation tracking
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -134,12 +138,36 @@ model Asset {
   @@index([type])
   @@index([status])
 
-
-  
   relationshipsFrom Relationship[] @relation("FromAsset")
   relationshipsTo   Relationship[] @relation("ToAsset")
-  
+}
 
+
+model AssetCpe {
+  id String @id @default(uuid()) @db.Uuid
+  assetId String @db.Uuid
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  cpeName String
+  cpeNameId String?
+  title String
+  score Float
+
+  vendor String?
+  product String?
+  version String?
+
+  vendorScore Float?
+  productScore Float?
+  versionScore Float?
+  tokenOverlapScore Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([assetId])
+  @@index([cpeName])
+  @@unique([assetId, cpeName])
 }
 
 model Relationship {
@@ -242,10 +270,12 @@ model SecurityScan {
   mediumCount          Int         @default(0)
   lowCount             Int         @default(0)
   riskScore            Float?
+  isMock               Boolean     @default(false)  // True for dev mode generated scans
   assetScans           AssetScan[]
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
   @@index([environmentId])
+  @@index([isMock])
 }
 
 model AssetScan {
@@ -273,12 +303,28 @@ model Vulnerability {
   severity         VulnSeverity @default(UNKNOWN)
   publishedDate    DateTime?
   lastModifiedDate DateTime?
+  
+  // Mock vulnerability fields for dev mode testing
+  isMock           Boolean      @default(false)
+  mockPrompt       String?      @db.Text
+  createdBy        String?      @db.Uuid
+  
   assetVulnerabilities AssetVulnerability[]
+  vulnerabilityWorkflows VulnerabilityWorkflow[]
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
   @@index([cveId])
   @@index([severity])
+  @@index([isMock])
+}
+
+enum VulnStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  FALSE_POSITIVE
+  RISK_ACCEPTED
 }
 
 model AssetVulnerability {
@@ -294,4 +340,40 @@ model AssetVulnerability {
   @@unique([assetScanId, vulnerabilityId])
   @@index([assetScanId])
   @@index([vulnerabilityId])
+}
+
+// VulnerabilityWorkflow tracks remediation state across scans
+// Status persists even if CVE is not found in subsequent scans
+model VulnerabilityWorkflow {
+  id              String        @id @default(uuid()) @db.Uuid
+  environmentId   String        @db.Uuid
+  environment     Environment   @relation(fields:[environmentId], references:[id], onDelete:Cascade)
+  assetId         String        @db.Uuid
+  asset           Asset         @relation(fields:[assetId], references:[id], onDelete:Cascade)
+  vulnerabilityId String        @db.Uuid
+  vulnerability   Vulnerability @relation(fields:[vulnerabilityId], references:[id], onDelete:Cascade)
+  cpeName         String
+  
+  // Remediation state
+  status          VulnStatus    @default(OPEN)
+  assigneeId      String?       @db.Uuid
+  assignee        UserAccount?  @relation("AssignedVulnerabilities", fields:[assigneeId], references:[id])
+  notes           String?       @db.Text
+  dueDate         DateTime?
+  resolvedAt      DateTime?
+  resolvedBy      String?       @db.Uuid
+  resolver        UserAccount?  @relation("ResolvedVulnerabilities", fields:[resolvedBy], references:[id])
+  
+  // Tracking
+  firstSeenAt     DateTime      @default(now())
+  lastSeenAt      DateTime      @default(now())
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@unique([environmentId, assetId, vulnerabilityId, cpeName])
+  @@index([environmentId, status])
+  @@index([assetId])
+  @@index([assigneeId])
+  @@index([status])
 }

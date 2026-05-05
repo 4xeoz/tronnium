@@ -59,6 +59,27 @@ export type CpeCandidate = {
   };
 };
 
+export type AssetVulnerabilityItem = {
+  id: string;
+  cveId: string;
+  description: string;
+  cvssScore: number | null;
+  cvssVector: string | null;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
+  publishedDate: string | null;
+  lastModifiedDate: string | null;
+  cpeName: string;
+};
+
+export type AssetVulnerabilitiesResponse = {
+  assetId: string;
+  assetName: string;
+  scanId: string;
+  scannedAt: string;
+  vulnerabilityCount: number;
+  vulnerabilities: AssetVulnerabilityItem[];
+};
+
 export type CpeFindResponse = {
   success: boolean;
   parsed: {
@@ -240,8 +261,8 @@ export async function createRelationship(
   toAssetId: string,
   type: RelationType,
   criticality: CriticalityLevel
-): Promise<ApiResponse<any>> {
-  const response = await apiFetch<ApiResponse<any>>(
+): Promise<ApiResponse<Relationship>> {
+  const response = await apiFetch<Relationship>(
     `/relationships/${environmentId}`,
     {
       method: "POST",
@@ -302,6 +323,17 @@ export async function updateAseetPosition(
   return response;
 }
 
+/**
+ * Get vulnerabilities for a specific asset from the latest scan
+ */
+export async function getAssetVulnerabilities(
+  environmentId: string,
+  assetId: string
+): Promise<ApiResponse<AssetVulnerabilitiesResponse>> {
+  return apiFetch<AssetVulnerabilitiesResponse>(
+    `/assets/${environmentId}/${assetId}/vulnerabilities`
+  );
+}
 
     
 

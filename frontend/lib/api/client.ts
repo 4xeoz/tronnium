@@ -9,48 +9,6 @@ export function getBackendUrl(): string {
   return process.env.NEXT_PUBLIC_BACKEND_URL ?? DEFAULT_BACKEND_URL;
 }
 
-// export type ApiResult<T> = {
-//   data: T | null;
-//   error: string | null;
-//   message: string | null;
-// };
-
-// /**
-//  * Generic API request helper with error handling
-//  */
-// export async function apiRequest<T>(
-//   endpoint: string,
-//   options?: RequestInit
-// ): Promise<ApiResult<T>> {
-//   const url = `${getBackendUrl()}${endpoint}`;
-
-//   try {
-//     const response = await fetch(url, {
-//       credentials: "include", // Always include cookies for auth
-//       ...options,
-//     });
-
-//     if (!response.ok) {
-//       const errorText = await response.text();
-//       return {
-//         data: null,
-//         error: errorText || `Request failed with status ${response.status}`,
-//         message: null,
-//       };
-//     }
-
-//     const data = (await response.json()) as T;
-//     return { data, error: null, message: null };
-//   } catch (error) {
-//     return {
-//       data: null,
-//       error: error instanceof Error ? error.message : "Network error",
-//       message: null,
-//     };
-//   }
-// }
-
-
 export type ApiResponse<T> = {
   success: boolean;
   data: T;
@@ -58,7 +16,10 @@ export type ApiResponse<T> = {
 };
 
 /**
- * Simplified fetch that throws on error (for simpler try/catch usage)
+ * Simplified fetch wrapper with:
+ * - Automatic Content-Type: application/json for requests with a body
+ * - Human-readable error extraction from JSON error responses
+ * - Credentials always included (cookie-based auth)
  */
 export async function apiFetch<T>(
   endpoint: string,
@@ -66,28 +27,44 @@ export async function apiFetch<T>(
 ): Promise<ApiResponse<T>> {
   const url = `${getBackendUrl()}${endpoint}`;
 
-  console.log(`[API] Request: ${options?.method || "GET"} ${url}`);
-  if (options?.body) {
-    console.log(`[API] Request body:`, options.body);
-  }
+  // Automatically add Content-Type for JSON bodies so Express can parse them.
+  // Callers that need a different Content-Type can pass it via options.headers.
+  const headers: Record<string, string> = {
+    ...(options?.body ? { "Content-Type": "application/json" } : {}),
+    ...(options?.headers as Record<string, string> | undefined),
+  };
 
-  const response = await fetch(url, { credentials: "include", ...options });
+  const response = await fetch(url, {
+    credentials: "include",
+    ...options,
+    headers,
+  });
 
-  console.log(`[API] Response status: ${response.status} ${response.statusText}`);
-
-  // ❌ HTTP error (404, 500, etc.)
+  // Non-OK HTTP status: extract a human-readable message instead of throwing
+  // the raw JSON string (which would show up verbatim in the UI).
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[API] Error response:`, errorText);
-    throw new Error(errorText || `Request failed: ${response.status}`);
+    let errorMessage = `Request failed: ${response.status}`;
+    try {
+      const errorJson = await response.json();
+      // Backend can use either "error" or "message" key
+      errorMessage =
+        (typeof errorJson.error === "string" && errorJson.error) ||
+        (typeof errorJson.message === "string" && errorJson.message) ||
+        errorMessage;
+    } catch {
+      const errorText = await response.text();
+      if (errorText) errorMessage = errorText;
+    }
+    throw new Error(errorMessage);
   }
 
-  // ✅ Parse JSON once
   const json: ApiResponse<T> = await response.json();
-  console.log(`[API] Response body:`, json);
 
+  if (json.success === false) {
+    throw new Error(
+      (typeof json.message === "string" && json.message) || "Request failed"
+    );
+  }
 
-  console.log(`[API] Success:`, json);
-
-  return json; // ✅ Success
+  return json;
 }

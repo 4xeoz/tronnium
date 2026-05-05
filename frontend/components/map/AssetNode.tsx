@@ -3,7 +3,8 @@
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
 import { FiCpu, FiServer, FiDatabase, FiWifi, FiShield, FiHardDrive } from "react-icons/fi";
-import type { Asset } from "@/lib/api";
+import type { Asset, ScanSeverity } from "@/lib/api";
+import type { VulnSummary } from "@/app/environments/[envId]/map/page";
 
 const typeConfig: Record<string, { icon: React.ElementType; accent: string }> = {
   server:   { icon: FiServer,    accent: "var(--info-text)" },
@@ -14,12 +15,60 @@ const typeConfig: Record<string, { icon: React.ElementType; accent: string }> = 
   unknown:  { icon: FiCpu,       accent: "var(--text-muted)" },
 };
 
-function AssetNode({ data, selected }: NodeProps<{ asset: Asset; label: string }>) {
+const SEVERITY_BORDER: Record<ScanSeverity, string> = {
+  CRITICAL: "border-red-500",
+  HIGH:     "border-orange-500",
+  MEDIUM:   "border-yellow-500",
+  LOW:      "border-blue-400",
+  UNKNOWN:  "border-border",
+};
+
+const SEVERITY_GLOW: Record<ScanSeverity, string> = {
+  CRITICAL: "drop-shadow(0 0 8px rgba(239,68,68,0.7))",
+  HIGH:     "drop-shadow(0 0 8px rgba(249,115,22,0.6))",
+  MEDIUM:   "drop-shadow(0 0 8px rgba(234,179,8,0.5))",
+  LOW:      "drop-shadow(0 0 6px rgba(96,165,250,0.5))",
+  UNKNOWN:  "none",
+};
+
+const VULN_BADGE: Record<ScanSeverity, { bg: string; text: string; label: string }> = {
+  CRITICAL: { bg: "bg-red-500",    text: "text-white", label: "CRIT" },
+  HIGH:     { bg: "bg-orange-500", text: "text-white", label: "HIGH" },
+  MEDIUM:   { bg: "bg-yellow-500", text: "text-black", label: "MED" },
+  LOW:      { bg: "bg-blue-400",   text: "text-white", label: "LOW" },
+  UNKNOWN:  { bg: "bg-gray-400",   text: "text-white", label: "?" },
+};
+
+function AssetNode({ data, selected }: NodeProps<{ asset: Asset; label: string; vulnSummary?: VulnSummary }>) {
   const asset = data.asset;
+  const vulnSummary = data.vulnSummary;
   const cpeCount = Array.isArray(asset.cpes) ? asset.cpes.length : 0;
   const config = typeConfig[asset.type] || typeConfig.unknown;
   const Icon = config.icon;
   const isActive = asset.status === "active";
+
+  const sev = vulnSummary?.highestSeverity;
+  const hasVulns = (vulnSummary?.total ?? 0) > 0;
+
+  const borderClass = selected
+    ? "border-brand-1"
+    : sev
+    ? SEVERITY_BORDER[sev]
+    : "border-border hover:border-border-secondary";
+
+  const glowFilter = selected
+    ? `drop-shadow(0 0 8px ${config.accent})`
+    : sev
+    ? SEVERITY_GLOW[sev]
+    : undefined;
+
+  // Badge: show worst severity count
+  const badgeCount = sev === "CRITICAL" ? vulnSummary!.critical
+    : sev === "HIGH"   ? vulnSummary!.high
+    : sev === "MEDIUM" ? vulnSummary!.medium
+    : sev === "LOW"    ? vulnSummary!.low
+    : 0;
+  const badge = sev ? VULN_BADGE[sev] : null;
 
   return (
     <>
@@ -27,14 +76,16 @@ function AssetNode({ data, selected }: NodeProps<{ asset: Asset; label: string }
 
       <div
         className="relative group"
-        style={{ filter: selected ? `drop-shadow(0 0 8px ${config.accent})` : undefined }}
+        style={{ filter: glowFilter }}
       >
+        {/* Critical pulsing ring */}
+        {sev === "CRITICAL" && (
+          <div className="absolute inset-0 rounded-xl border-2 border-red-500 animate-pulse pointer-events-none" />
+        )}
+
         {/* Card */}
         <div
-          className={`
-            w-48 rounded-xl border bg-surface px-3 py-3 transition-all duration-200
-            ${selected ? "border-brand-1 shadow-lg" : "border-border hover:border-border-secondary"}
-          `}
+          className={`w-48 rounded-xl border bg-surface px-3 py-3 transition-all duration-200 ${borderClass}`}
         >
           {/* Top row: icon + name + status dot */}
           <div className="flex items-center gap-2.5">
@@ -56,7 +107,7 @@ function AssetNode({ data, selected }: NodeProps<{ asset: Asset; label: string }
           </div>
 
           {/* Bottom row: badges */}
-          <div className="flex items-center gap-1.5 mt-2.5">
+          <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
             <span
               className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
                 asset.domain === "IT"
@@ -76,6 +127,12 @@ function AssetNode({ data, selected }: NodeProps<{ asset: Asset; label: string }
             {asset.ipAddress && (
               <span className="px-1.5 py-0.5 rounded bg-surface-secondary text-text-muted text-[9px] font-mono truncate max-w-[72px]">
                 {asset.ipAddress}
+              </span>
+            )}
+            {/* Vulnerability badge */}
+            {hasVulns && badge && (
+              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${badge.bg} ${badge.text}`}>
+                {badgeCount} {badge.label}
               </span>
             )}
           </div>
