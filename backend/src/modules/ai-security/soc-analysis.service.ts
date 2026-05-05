@@ -1,5 +1,5 @@
 import { geminiClient, defaultModel, callGemini } from "../../lib/gemini";
-import type { SocAnalysis, SocAnalysisInput } from "../../types/vulnerability.types";
+import type { SocAnalysis, SocAnalysisInput } from "./soc-analysis.types";
 
 const VALID_URGENCY = ["IMMEDIATE", "HIGH", "MEDIUM", "LOW"] as const;
 

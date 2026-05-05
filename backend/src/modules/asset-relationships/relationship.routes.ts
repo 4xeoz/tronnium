@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { jwtAuthGuard } from "../authentication/passport";
+import { jwtAuthGuard } from "../authentication/public";
 import { logRequest } from "../../middleware/logger";
 import {
   getRelationshipsHandler,

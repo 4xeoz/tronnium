@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "../../lib/prisma";
-import { verifyEnvironment } from "../environments/environment-helpers";
+import { verifyEnvironment } from "../../lib/verify-environment";
 import type { PublicUser } from "../../types/express";
 import { ok, err } from "../../lib/response-helpers";
 

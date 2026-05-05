@@ -239,7 +239,7 @@ export default function EnvironmentsPage() {
         <StatsRow environments={environments} />
       </div>
 
-      <div className="rounded-[24px] border border-border bg-surface overflow-hidden">
+      <div className="rounded-[24px] border border-border bg-surface ">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="relative w-72">
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />

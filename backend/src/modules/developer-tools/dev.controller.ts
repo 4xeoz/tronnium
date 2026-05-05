@@ -1,11 +1,11 @@
 import { Request, Response } from "express";
 import prisma from "../../lib/prisma";
-import { verifyEnvironment } from "../environments/environment-helpers";
+import { verifyEnvironment } from "../../lib/verify-environment";
 import {
   generateMockVulnerabilities,
   clearMockVulnerabilities,
   getMockVulnerabilities,
-} from "../vulnerability-scans/mock-vulnerability.service";
+} from "../scan-mock/public";
 import type { PublicUser } from "../../types/express";
 import { ok, err } from "../../lib/response-helpers";
 
@@ -122,7 +122,7 @@ export async function getMockVulnerabilitiesHandler(
 
     const vulnerabilities = await getMockVulnerabilities(environmentId);
 
-    res.json({ ...ok(vulnerabilities), count: vulnerabilities.length });
+    res.json(ok(vulnerabilities));
   } catch (error: any) {
     console.error("[GetMockVulnerabilities] Error:", error);
     res.status(500).json(err("FETCH_FAILED", error.message || "Failed to fetch mock vulnerabilities"));

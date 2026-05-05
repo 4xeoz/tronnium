@@ -1,10 +1,10 @@
 import type { Request, Response } from "express";
-import { getLatestScan } from "../vulnerability-scans/scan.service";
-import { verifyEnvironment } from "../environments/environment-helpers";
-import { explainCve } from "../vulnerability-workflows/cve-explain.service";
+import { getLatestScan } from "../scan-core/public";
+import { verifyEnvironment } from "../../lib/verify-environment";
+import { explainCve } from "../vulnerability-workflows/public";
 import { analyzeSocContext } from "./soc-analysis.service";
-import { analyzeEnvironment } from "../environments/environment-briefing.service";
-import type { SocAnalysisInput, AssetScanEntry } from "../../types/vulnerability.types";
+import { analyzeEnvironment, type AssetScanEntry } from "../environment-briefing/public";
+import type { SocAnalysisInput } from "./soc-analysis.types";
 import { ok, err } from "../../lib/response-helpers";
 
 /**

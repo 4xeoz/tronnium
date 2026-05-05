@@ -1,0 +1,1 @@
+export { jwtAuthGuard } from "./passport";

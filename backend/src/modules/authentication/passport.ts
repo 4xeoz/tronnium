@@ -4,7 +4,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import type { JwtPayload } from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 import { appConfig } from "../../config/config";
-import { userService } from "../users/user.service";
+import { userService } from "../users/public";
 
 const cookieExtractor = (req: any) => {
   return req?.cookies?.token ?? null;

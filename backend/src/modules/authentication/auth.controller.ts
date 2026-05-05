@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { appConfig } from "../../config/config";
 import type { PublicUser } from "../../types/user.types";
-import { userService } from "../users/user.service";
+import { userService } from "../users/public";
 import { ok, err } from "../../lib/response-helpers";
 
 export function googleAuthHandler(req: Request, res: Response) {

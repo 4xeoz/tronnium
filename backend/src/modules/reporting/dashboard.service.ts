@@ -1,9 +1,8 @@
 import prisma from "../../lib/prisma";
-import { ScanStatus } from "@prisma/client";
-import type { LatestScanSummary, RecentScanSummary } from "../../types/scan.types";
-import { SEVERITY_WEIGHT } from "../vulnerability-scans/scan-helpers";
-import { isInactiveStatus } from "../vulnerability-workflows/workflow-helpers";
-import { whereNotMock } from "../vulnerability-scans/scan-helpers";
+import { ScanStatus, VulnStatus } from "@prisma/client";
+import type { LatestScanSummary, RecentScanSummary } from "../scan-core/public";
+import { SEVERITY_WEIGHT, whereNotMock } from "../../lib/severity";
+import { isInactiveStatus } from "../vulnerability-workflows/public";
 
 const SLA_DAYS: Record<string, number> = {
   CRITICAL: 7,
