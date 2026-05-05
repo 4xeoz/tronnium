@@ -271,6 +271,9 @@ model SecurityScan {
   lowCount             Int         @default(0)
   riskScore            Float?
   isMock               Boolean     @default(false)  // True for dev mode generated scans
+  epssRiskScore        Float?
+
+
   assetScans           AssetScan[]
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
@@ -308,6 +311,11 @@ model Vulnerability {
   isMock           Boolean      @default(false)
   mockPrompt       String?      @db.Text
   createdBy        String?      @db.Uuid
+
+  // EPSS fields for risk-based prioritization
+  epssScore       Float?
+  epssPercentile  Float?
+  epssLastFetched DateTime?
   
   assetVulnerabilities AssetVulnerability[]
   vulnerabilityWorkflows VulnerabilityWorkflow[]

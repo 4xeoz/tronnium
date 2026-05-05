@@ -6,16 +6,17 @@ export interface ScanProgress {
 }
 
 export interface ScanResult {
-  id: string;
-  status: ScanStatus;
-  totalAssets: number;
-  scannedAssets: number;
+  id:                   string;
+  status:               ScanStatus;
+  totalAssets:          number;
+  scannedAssets:        number;
   vulnerabilitiesFound: number;
-  criticalCount: number;
-  highCount: number;
-  mediumCount: number;
-  lowCount: number;
-  riskScore: number | null;
+  criticalCount:        number;
+  highCount:            number;
+  mediumCount:          number;
+  lowCount:             number;
+  riskScore:            number | null;
+  epssRiskScore:        number | null; // ADD
 }
 
 export interface ScanOptions {
@@ -45,3 +46,5 @@ export interface RecentScanSummary {
   completedAt: Date | null;
   status: string;
 }
+
+
