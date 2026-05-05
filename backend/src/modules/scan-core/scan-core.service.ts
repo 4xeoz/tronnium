@@ -4,6 +4,8 @@ import { AssetCpe, ScanStatus } from "@prisma/client";
 import { getOrCreateWorkflow, shouldHideVulnerability } from "../vulnerability-workflows/public";
 import type { ScanProgress, ScanResult, ScanOptions } from "./scan.types";
 import { countSeverities, calculateRiskScore, whereNotMock } from "../../lib/severity";
+import { fetchEpssForCves }       from "../../lib/epss.service";
+import { calculateEpssRiskScore } from "../../lib/severity";
 
 const SCAN_WITH_ASSETS_INCLUDE = {
   assetScans: {
@@ -85,7 +87,15 @@ async function processAssetScan(
   environmentId: string,
   pubStartDate: Date | undefined,
   onProgress?: (progress: ScanProgress) => void
-): Promise<{ vulnerabilityCount: number; severityCounts: SeverityCounts; mockCount: number }> {
+): 
+Promise<{
+  vulnerabilityCount: number;
+  severityCounts:     SeverityCounts;
+  mockCount:          number;
+  epssVulns:          Array<{ cvssScore: number | null; epssScore: number | null }>;
+}> 
+
+{
   const assetScan = await prisma.assetScan.create({
     data: {
       scanId,
@@ -97,6 +107,7 @@ async function processAssetScan(
   const cpes = Array.isArray(asset.cpes) ? asset.cpes : [];
   const assetVulnerabilities = new Map<string, string>();
   const severityCounts: SeverityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+  const upsertedVulns: Array<{ id: string; cveId: string; cvssScore: number | null }> = [];
 
   for (const cpeItem of cpes) {
     const cpeName = typeof cpeItem === "string" ? cpeItem : cpeItem.cpeName;
@@ -126,6 +137,7 @@ async function processAssetScan(
         });
 
         assetVulnerabilities.set(vulnerability.id, cpeName);
+        upsertedVulns.push({ id: vulnerability.id, cveId: vulnerability.cveId, cvssScore: vulnerability.cvssScore });
 
         const sev = vulnerability.severity.toLowerCase();
         if (sev in severityCounts) {
@@ -171,6 +183,32 @@ async function processAssetScan(
       console.log(`[Scan] Including mock CVE ${vuln.cveId} for ${asset.name}`);
     }
   }
+
+const epssVulns: Array<{ cvssScore: number | null; epssScore: number | null }> = [];
+try {
+  const cveIds = upsertedVulns.map(v => v.cveId);
+  if (cveIds.length > 0) {
+    const epssMap = await fetchEpssForCves(cveIds);
+    await Promise.all(upsertedVulns.map(async (v) => {
+      const epss = epssMap.get(v.cveId);
+      if (epss) {
+        await prisma.vulnerability.update({
+          where: { id: v.id },
+          data: {
+            epssScore:       epss.epssScore,
+            epssPercentile:  epss.percentile,
+            epssLastFetched: new Date(),
+          },
+        });
+        epssVulns.push({ cvssScore: v.cvssScore, epssScore: epss.epssScore });
+      } else {
+        epssVulns.push({ cvssScore: v.cvssScore, epssScore: null });
+      }
+    }));
+  }
+} catch (error) {
+  console.error("[EPSS] Enrichment failed, scan continues:", error);
+}
 
   const visibleVulnerabilities = new Map<string, string>();
 
@@ -222,11 +260,7 @@ async function processAssetScan(
     message,
   });
 
-  return {
-    vulnerabilityCount: visibleVulnerabilities.size,
-    severityCounts,
-    mockCount,
-  };
+  return { vulnerabilityCount: visibleVulnerabilities.size, severityCounts, mockCount, epssVulns };
 }
 
 async function finalizeScan(
@@ -235,9 +269,12 @@ async function finalizeScan(
   scannedAssets: number,
   vulnerabilitiesFound: number,
   severityCounts: SeverityCounts,
+  allEpssVulns:         Array<{ cvssScore: number | null; epssScore: number | null }>,
   onProgress?: (progress: ScanProgress) => void
 ): Promise<ScanResult> {
   const riskScore = calculateRiskScore(severityCounts, assetsLength);
+  const epssRiskScore = calculateEpssRiskScore(allEpssVulns, assetsLength);
+
 
   const completedScan = await prisma.securityScan.update({
     where: { id: scanId },
@@ -251,6 +288,7 @@ async function finalizeScan(
       mediumCount: severityCounts.medium,
       lowCount: severityCounts.low,
       riskScore,
+      epssRiskScore
     },
   });
 
@@ -289,6 +327,9 @@ export async function runScan(
     let vulnerabilitiesFound = 0;
     const totalSeverityCounts: SeverityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
 
+    const allEpssVulns: Array<{ cvssScore: number | null; epssScore: number | null }> = [];
+
+
     for (let i = 0; i < assets.length; i++) {
       const asset = assets[i];
 
@@ -298,6 +339,8 @@ export async function runScan(
       });
 
       const result = await processAssetScan(scan.id, asset, environmentId, pubStartDate, onProgress);
+
+      allEpssVulns.push(...result.epssVulns);
 
       scannedAssets++;
       vulnerabilitiesFound += result.vulnerabilityCount;
@@ -313,6 +356,7 @@ export async function runScan(
       scannedAssets,
       vulnerabilitiesFound,
       totalSeverityCounts,
+      allEpssVulns,
       onProgress
     );
   } catch (error) {

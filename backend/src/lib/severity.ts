@@ -51,3 +51,22 @@ export function calculateRiskScore(
     (totalAssets || 1);
   return Math.min(100, score);
 }
+
+
+export function epssAdjustedCvss(
+  cvssScore: number | null,
+  epssScore: number | null
+): number {
+  return (cvssScore ?? 5.0) * (1 + (epssScore ?? 0));
+}
+
+export function calculateEpssRiskScore(
+  vulnerabilities: Array<{ cvssScore: number | null; epssScore: number | null }>,
+  totalAssets: number
+): number {
+  if (vulnerabilities.length === 0) return 0;
+  const total = vulnerabilities.reduce(
+    (sum, v) => sum + epssAdjustedCvss(v.cvssScore, v.epssScore), 0
+  );
+  return Math.min(100, total / (totalAssets || 1));
+}
