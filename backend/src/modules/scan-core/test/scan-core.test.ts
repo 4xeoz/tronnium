@@ -242,6 +242,50 @@ describe("Scan Core API", () => {
     });
 
     // -------------------------------------------------------------------------
+    // EPSS risk score — scan result fields
+    // -------------------------------------------------------------------------
+
+    describe("EPSS risk score in scan results", () => {
+        it("latest completed scan includes epssRiskScore field", async () => {
+            const scan = await seedTestScan(envId, "COMPLETED");
+
+            const res = await request(app)
+                .get(`/scans/${envId}/latest`)
+                .set("Authorization", `Bearer ${token}`);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data).toHaveProperty("id", scan.id);
+            // epssRiskScore must be present (null is valid when no vulnerabilities were scanned)
+            expect("epssRiskScore" in res.body.data).toBe(true);
+        });
+
+        it("scan start result contains epssRiskScore", async () => {
+            const res = await request(app)
+                .get(`/scans/${envId}/start`)
+                .set("Authorization", `Bearer ${token}`)
+                .set("Accept", "text/event-stream")
+                .buffer(true)
+                .parse((res, callback) => {
+                    let data = "";
+                    res.on("data", (chunk: Buffer) => { data += chunk.toString(); });
+                    res.on("end", () => { callback(null, data); });
+                });
+
+            expect(res.status).toBe(200);
+
+            // Extract the completed event payload
+            const completedLine = (res.body as string)
+                .split("\n")
+                .find((line: string) => line.startsWith("data:") && line.includes('"type":"completed"'));
+
+            expect(completedLine).toBeDefined();
+
+            const payload = JSON.parse(completedLine!.replace(/^data:\s*/, ""));
+            expect(payload.data).toHaveProperty("epssRiskScore");
+        });
+    });
+
+    // -------------------------------------------------------------------------
     // DELETE /scans/:environmentId/:scanId
     // -------------------------------------------------------------------------
 
