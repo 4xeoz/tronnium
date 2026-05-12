@@ -9,6 +9,14 @@ export function getBackendUrl(): string {
   return process.env.NEXT_PUBLIC_BACKEND_URL ?? DEFAULT_BACKEND_URL;
 }
 
+/**
+ * Build a full SSE URL from a path.
+ * Uses the same backend URL as regular API calls.
+ */
+export function getSseUrl(path: string): string {
+  return `${getBackendUrl()}${path}`;
+}
+
 export type ApiResponse<T> = {
   success: boolean;
   data: T;
@@ -16,10 +24,10 @@ export type ApiResponse<T> = {
 };
 
 /**
- * Simplified fetch wrapper with:
- * - Automatic Content-Type: application/json for requests with a body
- * - Human-readable error extraction from JSON error responses
- * - Credentials always included (cookie-based auth)
+ * Core fetch wrapper. Returns the full ApiResponse<T> from the backend.
+ * Throws on non-OK HTTP status or when json.success === false.
+ *
+ * Use this in the API layer when you want the raw response shape.
  */
 export async function apiFetch<T>(
   endpoint: string,
@@ -27,8 +35,6 @@ export async function apiFetch<T>(
 ): Promise<ApiResponse<T>> {
   const url = `${getBackendUrl()}${endpoint}`;
 
-  // Automatically add Content-Type for JSON bodies so Express can parse them.
-  // Callers that need a different Content-Type can pass it via options.headers.
   const headers: Record<string, string> = {
     ...(options?.body ? { "Content-Type": "application/json" } : {}),
     ...(options?.headers as Record<string, string> | undefined),
@@ -40,13 +46,10 @@ export async function apiFetch<T>(
     headers,
   });
 
-  // Non-OK HTTP status: extract a human-readable message instead of throwing
-  // the raw JSON string (which would show up verbatim in the UI).
   if (!response.ok) {
     let errorMessage = `Request failed: ${response.status}`;
     try {
       const errorJson = await response.json();
-      // Backend can use either "error" or "message" key
       errorMessage =
         (typeof errorJson.error === "string" && errorJson.error) ||
         (typeof errorJson.message === "string" && errorJson.message) ||
@@ -60,11 +63,26 @@ export async function apiFetch<T>(
 
   const json: ApiResponse<T> = await response.json();
 
-  if (json.success === false) {
-    throw new Error(
-      (typeof json.message === "string" && json.message) || "Request failed"
-    );
-  }
+  // if (json.success === false) {
+  //   throw new Error(
+  //     (typeof json.message === "string" && json.message) || "Request failed"
+  //   );
+  // }
 
   return json;
 }
+
+// /**
+//  * Convenience wrapper that returns only the data payload.
+//  * Use this in the intermediary layer or in components that don't need
+//  * the full ApiResponse wrapper (success flag, message).
+//  *
+//  * Errors are still thrown — always wrap in try/catch.
+//  */
+// export async function apiFetchData<T>(
+//   endpoint: string,
+//   options?: RequestInit
+// ): Promise<T> {
+//   const response = await apiFetch<T>(endpoint, options);
+//   return response.data;
+// }

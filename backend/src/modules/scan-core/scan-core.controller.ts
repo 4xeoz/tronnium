@@ -1,11 +1,12 @@
 import { Request, Response } from "express";
 import { runScan, getLatestScan, getScanHistory, getScanById } from "./scan-core.service";
-import type { ScanOptions } from "./scan.types";
+import type { ScanOptions, ScanProgress } from "./scan.types";
 import prisma from "../../lib/prisma";
 import { verifyEnvironment } from "../../lib/verify-environment";
 import { getMaxLookbackDate } from "../scan-nvd/public";
 import { ScanStatus } from "@prisma/client";
 import { ok, err } from "../../lib/response-helpers";
+import { createScanEmitter, getScanEmitter, removeScanEmitter } from "../../lib/scan-progress.bus";
 
 export async function startScanHandler(req: Request, res: Response): Promise<void> {
   const { environmentId } = req.params;
@@ -18,13 +19,25 @@ export async function startScanHandler(req: Request, res: Response): Promise<voi
   }
 
   try {
+
     if (!(await verifyEnvironment(userId, environmentId))) {
       res.status(404).json(err("NOT_FOUND", "Environment not found"));
       return;
     }
 
-    const scanOptions: ScanOptions = {};
+    // Prevent concurrent scans on the same environment
+    const runningScan = await prisma.securityScan.findFirst({
+      where: { environmentId, status: ScanStatus.IN_PROGRESS },
+      select: { id: true, startedAt: true },
+    });
 
+    // If already running, return its scanId so client can connect to its progress stream
+    if (runningScan) {
+      res.status(200).json(ok({ scanId: runningScan.id, alreadyRunning: true }));
+      return;
+    }
+
+    const scanOptions: ScanOptions = {};
     if (fromDate) {
       if (fromDate === "last-scan") {
         scanOptions.fromDate = "last-scan";
@@ -38,37 +51,31 @@ export async function startScanHandler(req: Request, res: Response): Promise<voi
       }
     }
 
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-    res.flushHeaders();
-
-    const scanResult = await runScan(environmentId, scanOptions, (progress) => {
-      res.write(`data: ${JSON.stringify({ type: "progress", step: progress.stage, message: progress.message, timestamp: new Date().toISOString() })}\n\n`);
+    // Create DB record first so we have a scanId to return immediately
+    const scan = await prisma.securityScan.create({
+      data: { environmentId, status: ScanStatus.IN_PROGRESS, startedAt: new Date() },
     });
 
-    res.write(`data: ${JSON.stringify({
-      type: "completed",
-      data: {
-        scanId: scanResult.id,
-        status: scanResult.status,
-        totalAssets: scanResult.totalAssets,
-        scannedAssets: scanResult.scannedAssets,
-        vulnerabilitiesFound: scanResult.vulnerabilitiesFound,
-        criticalCount: scanResult.criticalCount,
-        highCount: scanResult.highCount,
-        mediumCount: scanResult.mediumCount,
-        lowCount: scanResult.lowCount,
-        riskScore: scanResult.riskScore,
-      },
-      timestamp: new Date().toISOString(),
-    })}\n\n`);
-    res.end();
+    const emitter = createScanEmitter(scan.id);
+
+    // Fire scan in background — do NOT await
+    runScan(environmentId, scan.id, scanOptions, (progress) => {
+      emitter.emit("progress", progress);
+    }).then(() => {
+      emitter.emit("completed", { scanId: scan.id });
+      removeScanEmitter(scan.id);
+    }).catch((error) => {
+      emitter.emit("error", error instanceof Error ? error.message : "Unknown error occurred");
+      removeScanEmitter(scan.id);
+    });
+
+    // Respond immediately with the scanId
+    res.status(200).json(ok({ scanId: scan.id, alreadyRunning: false }));
+      
+        
   } catch (error) {
-    console.error("Scan error:", error);
-    res.write(`data: ${JSON.stringify({ type: "error", message: error instanceof Error ? error.message : "Unknown error occurred", timestamp: new Date().toISOString() })}\n\n`);
-    res.end();
+    console.error("Failed to start scan:", error);
+    res.status(500).json(err("START_FAILED", "Failed to start scan"));
   }
 }
 
@@ -235,4 +242,60 @@ export async function deleteScanHandler(req: Request, res: Response): Promise<vo
     console.error("[Scan] deleteScan error:", error);
     res.status(500).json(err("DELETE_FAILED", "Failed to delete scan"));
   }
+}
+
+
+export async function getScanProgressHandler(req: Request, res: Response): Promise<void> {
+  const { environmentId, scanId } = req.params;
+  const userId = req.user?.id;
+
+  if (!environmentId || !scanId || !userId) {
+    res.status(400).json(err("INVALID_INPUT", "Missing required parameters"));
+    return;
+  }
+
+  if (!(await verifyEnvironment(userId, environmentId))) {
+    res.status(404).json(err("NOT_FOUND", "Environment not found"));
+    return;
+  }
+
+  const emitter = getScanEmitter(scanId);
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  // scane already completed or doesn't exist
+  if (!emitter) {
+    res.write(`data: ${JSON.stringify({ type: "completed", message: "Scan already completed" })}\n\n`);
+    res.end();
+    return;
+  }
+
+  const onProgress = (progress: ScanProgress) => {
+    res.write(`data: ${JSON.stringify({ type: "progress", step: progress.stage, message: progress.message, timestamp: new Date().toISOString() })}\n\n`);
+  };
+
+  const onDone = (data: { scanId: string }) => {
+    res.write(`data: ${JSON.stringify({ type: "completed", data, timestamp: new Date().toISOString() })}\n\n`);
+    res.end();
+  };
+
+  const onError = (message: string) => {
+    res.write(`data: ${JSON.stringify({ type: "error", message, timestamp: new Date().toISOString() })}\n\n`);
+    res.end();
+  };
+
+  emitter.on("progress", onProgress);
+  emitter.on("completed", onDone);
+  emitter.on("error", onError);
+
+  // Client disconnected — remove listeners but scan keeps running
+  req.on("close", () => {
+    emitter.off("progress", onProgress);
+    emitter.off("completed", onDone);
+    emitter.off("error", onError);
+  });
 }

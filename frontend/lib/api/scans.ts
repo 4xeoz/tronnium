@@ -1,10 +1,12 @@
 /**
- * Scan API - Vulnerability scanning operations with SSE progress tracking
+ * Scan API - Network operations for vulnerability scanning
+ * Each function returns exactly what the backend sends, unwrapped.
  */
 
-import { apiFetch, ApiResponse } from "./client";
+import { apiFetch, ApiResponse, getSseUrl } from "./client";
 
-// Types
+// ─── Types ───────────────────────────────────────────────────
+
 export type ScanStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "FAILED";
 
 export type ScanSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
@@ -103,145 +105,87 @@ export type ScanSettings = {
 
 export type ScanFromDateOption = "all" | "last-scan" | "custom";
 
-/**
- * Start a vulnerability scan with SSE progress updates
- * Uses POST to /scans/:environmentId with EventSource
- * 
- * @param environmentId - The environment to scan
- * @param fromDate - Optional: "last-scan" or ISO date string to scan from
- * @param onProgress - Callback for progress messages
- * @param onComplete - Callback when scan completes
- * @param onError - Callback on error
- */
-export function startScan(
+// POST to start scan — returns scanId immediately
+export async function startScan(
   environmentId: string,
   fromDate?: string,
-  onProgress?: (message: string) => void,
-  onComplete?: (result: ScanResult) => void,
-  onError?: (error: string) => void
+): Promise<ApiResponse<{ scanId: string; alreadyRunning: boolean }>> {
+  const params = fromDate ? `?fromDate=${encodeURIComponent(fromDate)}` : "";
+  return apiFetch<{ scanId: string; alreadyRunning: boolean }>(
+    `/scans/${environmentId}/start${params}`,
+    { method: "POST" },
+  );
+}
+
+  // SSE to watch progress 
+export function listenForScanProgress(
+  environmentId: string,
+  scanId: string,
+  onProgress: (message: string) => void,
+  onComplete: (data: { scanId: string }) => void,
+  onError: (error: string) => void
 ): EventSource {
-  const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
-  
-  // Build URL with optional fromDate parameter
-  const url = new URL(`${baseUrl}/scans/${environmentId}/start`);
-  if (fromDate) {
-    url.searchParams.set("fromDate", fromDate);
-  }
-  
-  // Use /start endpoint for SSE (EventSource only supports GET)
-  const eventSource = new EventSource(url.toString(), { withCredentials: true });
+  const url = getSseUrl(`/scans/${environmentId}/progress/${scanId}`);
+  console.log("[SSE] Connecting to:", url);
+  const eventSource = new EventSource(url, { withCredentials: true });
+
+  eventSource.onopen = () => {
+    console.log("[SSE] Connection opened, readyState:", eventSource.readyState);
+  };
 
   eventSource.onmessage = (event) => {
+    console.log("[SSE] Raw message received:", event.data);
     try {
-      const data: ScanProgress = JSON.parse(event.data);
-
-      if (data.type === "progress") {
-        onProgress?.(data.message);
-      } else if (data.type === "completed") {
-        if (data.data) {
-          onComplete?.(data.data);
-        }
-        eventSource.close();
-      } else if (data.type === "error") {
-        onError?.(data.message || "Scan failed");
-        eventSource.close();
-      }
-    } catch (parseError) {
-      console.error("Failed to parse SSE message:", parseError);
-      onError?.("Failed to parse scan update");
+      const data = JSON.parse(event.data);
+      console.log("[SSE] Parsed event:", data);
+      if (data.type === "progress") onProgress(data.message);
+      else if (data.type === "completed") { onComplete(data.data); eventSource.close(); }
+      else if (data.type === "error") { onError(data.message); eventSource.close(); }
+      else if (data.type === "done") { onComplete({ scanId }); eventSource.close(); }
+      else console.warn("[SSE] Unknown event type:", data.type);
+    } catch (e) {
+      console.error("[SSE] Failed to parse event:", event.data, e);
+      onError("Failed to parse update");
       eventSource.close();
     }
   };
 
-  eventSource.onerror = () => {
-    onError?.("Connection error. Please try again.");
+  eventSource.onerror = (e) => {
+    console.error("[SSE] Connection error, readyState:", eventSource.readyState, e);
+    onError("Connection error. Please try again.");
     eventSource.close();
   };
 
   return eventSource;
 }
 
-/**
- * Get the latest completed scan with full vulnerability details
- */
-export async function getLatestScan(environmentId: string): Promise<ApiResponse<LatestScan>> {
+
+// ─── Fetch Functions ─────────────────────────────────────────
+
+export async function fetchLatestScan(environmentId: string): Promise<ApiResponse<LatestScan>> {
   return apiFetch<LatestScan>(`/scans/${environmentId}/latest`);
 }
 
-/**
- * Get scan history for an environment
- * @param environmentId - Environment ID
- * @param limit - Number of scans to return (default: 10, max: 100)
- */
-export async function getScanHistory(
-  environmentId: string, 
+export async function fetchScanHistory(
+  environmentId: string,
   limit: number = 10
 ): Promise<ApiResponse<ScanHistoryItem[]>> {
   return apiFetch<ScanHistoryItem[]>(`/scans/${environmentId}?limit=${limit}`);
 }
 
-/**
- * Get scan settings for an environment
- * Returns last scan date, max lookback date, and other settings
- */
-export async function getScanSettings(
-  environmentId: string
-): Promise<ApiResponse<ScanSettings>> {
+export async function fetchScanSettings(environmentId: string): Promise<ApiResponse<ScanSettings>> {
   return apiFetch<ScanSettings>(`/scans/${environmentId}/settings`);
 }
 
-/**
- * Get a single scan by ID with full details
- * Includes all asset scans and vulnerabilities
- */
-export async function getScanById(
+export async function fetchScanById(
   environmentId: string,
   scanId: string
 ): Promise<ApiResponse<LatestScan>> {
   return apiFetch<LatestScan>(`/scans/${environmentId}/${scanId}`);
 }
 
-/**
- * Permanently delete a scan and all associated data.
- * Returns an error if the scan is currently IN_PROGRESS.
- */
-export async function deleteScan(
-  environmentId: string,
-  scanId: string
-): Promise<ApiResponse<null>> {
-  return apiFetch<null>(`/scans/${environmentId}/${scanId}`, { method: "DELETE" });
+export async function deleteScan(environmentId: string, scanId: string): Promise<ApiResponse<void>> {
+  return apiFetch<void>(`/scans/${environmentId}/${scanId}`, { method: "DELETE" });
 }
 
-/**
- * Calculate risk level from score
- */
-export function getRiskLevel(score: number | null | undefined): {
-  label: string;
-  color: string;
-} {
-  if (score === null || score === undefined) {
-    return { label: "Unknown", color: "text-text-muted" };
-  }
-  if (score < 20) return { label: "Low", color: "text-success-text" };
-  if (score < 40) return { label: "Moderate", color: "text-warning-text" };
-  if (score < 60) return { label: "High", color: "text-orange-500" };
-  return { label: "Critical", color: "text-error-text" };
-}
 
-/**
- * Format severity badge color
- */
-export function getSeverityColor(severity: ScanSeverity): string {
-  switch (severity) {
-    case "CRITICAL":
-      return "bg-red-500/10 text-red-500 border-red-500/20";
-    case "HIGH":
-      return "bg-orange-500/10 text-orange-500 border-orange-500/20";
-    case "MEDIUM":
-      return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
-    case "LOW":
-      return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-    default:
-      return "bg-surface-secondary text-text-muted border-border";
-  }
-}

@@ -7,6 +7,7 @@ import { assetVulnerabilitiesRouter } from "../modules/asset-vulnerabilities/ass
 import environmentRouter from "../modules/environments-core/environments-core.routes";
 import { relationshipRouter } from "../modules/asset-relationships/relationship.routes";
 import scanRouter from "../modules/scan-core/scan-core.routes";
+import scanScheduleRouter from "../modules/scan-schedule/scan-schedule.routes";
 import aiRouter from "../modules/ai-security/ai.routes";
 import devRouter from "../modules/developer-tools/dev.routes";
 import vulnerabilityWorkflowRouter from "../modules/vulnerability-workflows/vulnerability-workflow.routes";
@@ -25,6 +26,7 @@ apiRouter.use("/assets", assetCpesRouter);
 apiRouter.use("/assets", assetVulnerabilitiesRouter);
 apiRouter.use("/environments", environmentRouter);
 apiRouter.use("/relationships", relationshipRouter);
+apiRouter.use("/scans", scanScheduleRouter);
 apiRouter.use("/scans", scanRouter);
 apiRouter.use("/ai", aiRouter);
 apiRouter.use("/dev", devRouter);

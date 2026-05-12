@@ -6,21 +6,21 @@ import DependencyEdge from '@/components/map/DependencyEdge'
 import RelationshipSidebar from '@/components/map/RelationshipSidebar'
 import VulnDetailSlideOver, { type SelectedVuln } from '@/components/security/VulnDetailSlideOver'
 import {
-  getAllRelationships,
-  getAssets,
+  fetchRelationships,
+  fetchAssets,
   createRelationship,
   updateRelationship,
   deleteRelationship,
-  getLatestScan,
+  fetchLatestScan,
   type Asset,
   type RelationType,
   type CriticalityLevel,
   type ScanSeverity,
 } from '@/lib/api'
-import { getWorkflows, type WorkflowItem } from '@/lib/api/vulnerabilityWorkflow'
+import { fetchVulnerabilityWorkflows, type WorkflowItem, type VulnStatus } from '@/lib/api/vulnerabilityWorkflow'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
-import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -31,11 +31,9 @@ import ReactFlow, {
   Connection,
   Edge,
   Node,
-  type NodeChange,
-  type XYPosition,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { updateAseetPosition } from '@/lib/api/assets'
+import { updateAssetPosition } from '@/lib/api/assets'
 import { Button } from '@/components/ui/Button'
 import { INACTIVE_STATUSES } from '@/lib/securityConstants'
 
@@ -64,32 +62,31 @@ const Page = () => {
   const [workflowsForAsset, setWorkflowsForAsset] = useState<Map<string, WorkflowItem>>(new Map())
   const [error, setError] = useState<string | null>(null)
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null)
-  const positionUpdateTimeouts = useRef<{ [id: string]: NodeJS.Timeout }>({})
 
   const { data: ResponseOfAssets, isLoading: assetsLoading } = useQuery({
     queryKey: ['assets', envId],
-    queryFn: async () => getAssets(envId),
+    queryFn: async () => (await fetchAssets(envId)).data,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
 
   const { data: ResponseOfrelationships, isLoading: relationshipsLoading } = useQuery({
     queryKey: ['relationships', envId],
-    queryFn: async () => getAllRelationships(envId),
+    queryFn: async () => (await fetchRelationships(envId)).data,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
 
   const { data: latestScanRes } = useQuery({
     queryKey: ['latestScan', envId],
-    queryFn: async () => getLatestScan(envId),
+    queryFn: async () => (await fetchLatestScan(envId)).data,
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
 
   const { data: workflowsRes } = useQuery({
     queryKey: ['workflows', envId],
-    queryFn: async () => getWorkflows(envId),
+    queryFn: async () => (await fetchVulnerabilityWorkflows(envId)).data,
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
@@ -109,7 +106,7 @@ const Page = () => {
   })
 
   const updateMutation = useMutation({
-    mutationFn: (data: { relationshipId: string; type?: RelationType; criticality?: CriticalityLevel }) =>
+    mutationFn: (data: { relationshipId: string; type?: RelationType; criticality?: CriticalityLevel }) => 
       updateRelationship(envId, data.relationshipId, data.type, data.criticality),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['relationships', envId] })
@@ -135,23 +132,25 @@ const Page = () => {
   })
 
   const updatePositionMutation = useMutation({
-    mutationFn: ({assetId, x, y}: {assetId: string, x: number, y: number}) => updateAseetPosition(envId, assetId, x, y),
+    mutationFn: ({assetId, x, y}: {assetId: string, x: number, y: number}) => {
+      console.log('[Map] Saving position to backend:', assetId, { x, y })  // ← add
+      return updateAssetPosition(envId, assetId, x, y)},
     onError: (err) => {
       const msg = err instanceof Error ? err.message : 'Failed to update asset position'
       setError(msg)
     },
   })
 
-  const assets = ResponseOfAssets?.data || [];
+  const assets = ResponseOfAssets || [];
   const workflowLookup = useMemo(() => {
-    const map = new Map<string, string>()
-    workflowsRes?.data?.forEach(w => map.set(`${w.vulnerabilityId}-${w.assetId}-${w.cpeName}`, w.status))
+    const map = new Map<string, VulnStatus>()
+    workflowsRes?.forEach(w => map.set(`${w.vulnerabilityId}-${w.assetId}-${w.cpeName}`, w.status))
     return map
   }, [workflowsRes])
 
   const assetVulnMap = useMemo(() => {
     const map = new Map<string, VulnSummary>()
-    const assetScans = latestScanRes?.data?.assetScans
+    const assetScans = latestScanRes?.assetScans
     if (!assetScans) return map
     const severityOrder: ScanSeverity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']
     for (const assetScan of assetScans) {
@@ -178,11 +177,11 @@ const Page = () => {
   }, [latestScanRes, workflowLookup])
 
   const assetNodes = useMemo(() => {
-    if (!ResponseOfAssets || ResponseOfAssets.success === false) return [] as Node[]
+    if (!ResponseOfAssets) return [] as Node[]
     const cols = 3
     const xGap = 240
     const yGap = 120
-    const assetList = ResponseOfAssets.data || []
+    const assetList = ResponseOfAssets
     return assetList.map((asset, idx) => ({
       id: asset.id,
       type: 'asset',
@@ -195,8 +194,8 @@ const Page = () => {
   }, [ResponseOfAssets, assetVulnMap])
 
   const relationshipEdges = useMemo(() => {
-    if (!ResponseOfrelationships || ResponseOfrelationships.success === false) return [] as Edge[]
-    const relationships = ResponseOfrelationships.data
+    if (!ResponseOfrelationships) return [] as Edge[]
+    const relationships = ResponseOfrelationships
     return relationships.map((rel) => ({
       id: rel.id,
       source: rel.fromAssetId,
@@ -256,21 +255,10 @@ const Page = () => {
     setSelectedEdge(null)
   }, [])
 
-  const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    onNodesChange(changes)
-    changes.forEach((change) => {
-      if (change.type === 'position' && !change.dragging && change.id) {
-        const pos = (change as NodeChange & { position?: XYPosition }).position
-        if (!pos) return
-        if (positionUpdateTimeouts.current[change.id]) {
-          clearTimeout(positionUpdateTimeouts.current[change.id])
-        }
-        positionUpdateTimeouts.current[change.id] = setTimeout(() => {
-          updatePositionMutation.mutate({ assetId: change.id, x: pos.x, y: pos.y })
-        }, 500)
-      }
-    })
-  }, [onNodesChange, updatePositionMutation])
+  const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
+    console.log('[Map] Drag stopped for', node.id, '→', node.position)
+    updatePositionMutation.mutate({ assetId: node.id, x: node.position.x, y: node.position.y })
+  }, [updatePositionMutation])
 
   const handleWorkflowsLoaded = useCallback((wfs: WorkflowItem[]) => {
     const map = new Map<string, WorkflowItem>()
@@ -296,12 +284,14 @@ const Page = () => {
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          onNodesChange={handleNodesChange}
+          onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={onNodeClick}
           onEdgeClick={onEdgeClick}
           onPaneClick={onPaneClick}
+          onNodeDragStop={onNodeDragStop}
+          
           fitView
           fitViewOptions={{ padding: 0.3 }}
           proOptions={{ hideAttribution: true }}

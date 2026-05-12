@@ -4,7 +4,7 @@ import { getDashboardOverviewHandler } from "./dashboard.controller";
 
 const dashboardRouter = Router();
 
-dashboardRouter.use(jwtAuthGuard());
+// dashboardRouter.use(jwtAuthGuard());
 
 /**
  * GET /dashboard/:environmentId/overview

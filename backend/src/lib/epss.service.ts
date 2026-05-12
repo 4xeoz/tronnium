@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const EPSS_API = "https://api.first.org/data/1.0/epss";
+const EPSS_API = "https://api.first.org/data/v1/epss ";
 const BATCH_SIZE = 30;
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours — EPSS updates daily
 

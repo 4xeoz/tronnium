@@ -1,9 +1,11 @@
 "use client";
 
+
 import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { FiX, FiZap, FiExternalLink, FiAlertCircle, FiCheckCircle } from "react-icons/fi";
-import { explainCve, type CveExplanation, type ScanSeverity, getSeverityColor } from "@/lib/api";
+import { fetchCveExplanation, type CveExplanation, type ScanSeverity} from "@/lib/api";
+import { getSeverityColor } from "@/lib/formatters";
 
 interface AIExplainModalProps {
 	isOpen: boolean;
@@ -31,17 +33,14 @@ export function AIExplainModal({
 		setIsLoading(true);
 		setError(null);
 		try {
-			const response = await explainCve({
+			const response = await fetchCveExplanation({
 				cveId,
 				description,
 				cvssScore,
 				severity,
 			});
-			if (response.success && response.data) {
-				setExplanation(response.data);
-			} else {
-				setError(response.message || "Failed to generate explanation");
-			}
+			setExplanation(response.data);
+			
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "An error occurred");
 		} finally {

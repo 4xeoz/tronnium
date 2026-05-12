@@ -1,11 +1,12 @@
 "use client";
 
+
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { FiX, FiCpu, FiTag, FiCalendar, FiCheck, FiBox, FiShield, FiAlertTriangle } from "react-icons/fi";
 import type { Asset, CpeCandidate } from "@/lib/api";
-import { deleteAsset, getAssetVulnerabilities, type AssetVulnerabilityItem } from "@/lib/api/assets";
-import { getSeverityColor } from "@/lib/api/scans";
+import { deleteAsset, fetchAssetVulnerabilities, type AssetVulnerabilityItem } from "@/lib/api/assets";
+import { getSeverityColor } from "@/lib/formatters";
 
 interface AssetDetailsSlideOverProps {
   asset: Asset | null;
@@ -161,12 +162,12 @@ export default function AssetDetailsSlideOver({
     setVulnError(null);
     
     try {
-      const response = await getAssetVulnerabilities(
+      const response = await fetchAssetVulnerabilities(
         displayedAsset.environmentId,
         displayedAsset.id
       );
       
-      if (response.data) {
+      if (response) {
         setVulnerabilities(response.data.vulnerabilities);
       } else {
         setVulnError("Failed to load vulnerabilities");

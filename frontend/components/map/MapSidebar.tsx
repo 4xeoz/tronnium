@@ -1,14 +1,16 @@
 "use client"
 
+
 import { useEffect } from 'react'
 import { FiX, FiCpu, FiDatabase, FiServer, FiWifi, FiShield, FiHardDrive, FiShieldOff } from 'react-icons/fi'
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Asset } from '@/lib/api'
-import { getWorkflows, type WorkflowItem, getStatusLabel, type VulnStatus } from '@/lib/api/vulnerabilityWorkflow'
+import { fetchVulnerabilityWorkflows, type WorkflowItem, type VulnStatus } from '@/lib/api/vulnerabilityWorkflow'
 import { AgeBadge, Badge } from '@/components/security/SecurityUI'
 import type { SelectedVuln } from '@/components/security/VulnDetailSlideOver'
 import { SEVERITY_ORDER, STATUS_COLORS, getInitials } from '@/lib/securityConstants'
+import { getStatusLabel } from '@/lib/formatters'
 
 interface MapSidebarProps {
   asset: Asset | null;
@@ -44,22 +46,22 @@ export default function MapSidebar({ asset, environmentId, onClose, onVulnClick,
 
   const { data: workflowsRes, isLoading: workflowsLoading } = useQuery({
     queryKey: ['assetWorkflows', environmentId, asset?.id],
-    queryFn: async () => getWorkflows(environmentId, { assetId: asset!.id }),
+    queryFn: async () => (await fetchVulnerabilityWorkflows(environmentId, { assetId: asset!.id })).data,
     enabled: !!asset,
     staleTime: 60 * 1000,
   })
 
-  const workflows = workflowsRes?.data ?? []
+  const workflows = workflowsRes ?? []
   const sortedWorkflows = [...workflows].sort((a, b) => (SEVERITY_ORDER[b.severity] ?? 0) - (SEVERITY_ORDER[a.severity] ?? 0))
 
   useEffect(() => {
-    if (workflowsRes?.data && workflowsRes.data.length > 0) onWorkflowsLoaded?.(workflowsRes.data)
-  }, [workflowsRes?.data, onWorkflowsLoaded])
+    if (workflowsRes && workflowsRes.length > 0) onWorkflowsLoaded?.(workflowsRes)
+  }, [workflowsRes, onWorkflowsLoaded])
 
   if (!asset) return null
 
   return (
-    <div className="w-80 h-full bg-surface border-l border-border flex flex-col">
+    <div className="w-80 h-screen bg-surface border-l border-border flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <h2 className="text-sm font-semibold text-text-primary">Asset Details</h2>
         <button
@@ -70,7 +72,7 @@ export default function MapSidebar({ asset, environmentId, onClose, onVulnClick,
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 space-y-4">
+      <div className="flex-1 overflow-auto p-4 space-y-4 ">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-brand-1/10 flex items-center justify-center text-brand-1">
             <Icon className="w-5 h-5" />

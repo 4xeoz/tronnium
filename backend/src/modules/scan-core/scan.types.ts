@@ -1,7 +1,7 @@
 import type { ScanStatus } from "@prisma/client";
 
 export interface ScanProgress {
-  stage: "scanning" | "processing" | "completed";
+  stage: "scanning" | "processing" | "completed" | "error" | "info";
   message: string;
 }
 

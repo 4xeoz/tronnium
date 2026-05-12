@@ -9,10 +9,12 @@ export async function getDashboardOverviewHandler(
 ): Promise<void> {
   try {
     const { environmentId } = req.params;
-    const user = req.user!;
+    // const user = req.user!;
 
     const environment = await prisma.environment.findFirst({
-      where: { id: environmentId, ownerId: user.id },
+      where: { id: environmentId, 
+        // ownerId: user.id 
+      },
     });
 
     if (!environment) {

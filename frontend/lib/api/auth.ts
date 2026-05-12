@@ -1,5 +1,6 @@
 /**
- * Auth API - Authentication related operations
+ * Auth API - Authentication related network operations
+ * Each function returns exactly what the backend sends, unwrapped.
  */
 
 import { apiFetch, ApiResponse, getBackendUrl } from "./client";
@@ -14,10 +15,13 @@ export type User = {
   devMode: boolean;
 };
 
-// API Functions
-export async function getCurrentUser(): Promise<ApiResponse<User>> {
+// ─── Fetch Functions ─────────────────────────────────────────
+
+export async function fetchCurrentUser(): Promise<ApiResponse<User>> {
   return apiFetch<User>("/auth/me");
 }
+
+// ─── Utilities ───────────────────────────────────────────────
 
 export function getGoogleLoginUrl(): string {
   return `${getBackendUrl()}/auth/google`;

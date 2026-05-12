@@ -14,7 +14,7 @@ import {
   FiMoreHorizontal,
   FiEye,
 } from "react-icons/fi";
-import { getEnvironments, deleteEnvironment, type Environment } from "@/lib/api";
+import { fetchEnvironments, deleteEnvironment, type Environment } from "@/lib/api";
 import CreateEnvironmentSlideOver from "@/components/environments/CreateEnvironmentSlideOver";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -184,12 +184,9 @@ export default function EnvironmentsPage() {
   const loadEnvironments = useCallback(async () => {
     try {
       setError(null);
-      const { success, data, message } = await getEnvironments();
-      if (!success) {
-        setError(message || "Failed to load environments");
-        return;
-      }
-      setEnvironments(data);
+      const data = await fetchEnvironments();
+      
+      setEnvironments(data.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load environments");
     } finally {

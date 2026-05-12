@@ -132,9 +132,9 @@ export async function cpeValidateHandler(req: Request, res: Response) {
 
 export async function cpeSemanticSearchHandler(req: Request, res: Response) {
   try {
-    const { q, limit } = req.query;
+    const { q, limit } = req.body;
 
-    if (!q || typeof q !== "string" || q.trim().length < 2) {
+    if (!q || typeof q !== "string" || q.trim().length < 4) {
       return res.status(400).json(
         err("INVALID_INPUT", "q is required and must be at least 2 characters")
       );
@@ -148,6 +148,8 @@ export async function cpeSemanticSearchHandler(req: Request, res: Response) {
     console.log(`[CPE Semantic] Searching: "${q.trim()}" (limit: ${limitN})`);
 
     const { queryText, results } = await semanticCpeSearch(q.trim(), limitN);
+
+    console.log(`[CPE Semantic] Found ${results.length} results for "${queryText}"`);
 
     return res.status(200).json(
       ok({

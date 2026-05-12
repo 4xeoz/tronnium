@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { FiShield, FiAlertCircle } from "react-icons/fi";
-import { requestSocAnalysis, type SocAnalysis, type ScanSeverity } from "@/lib/api";
+import { fetchSocAnalysis, type SocAnalysis, type ScanSeverity } from "@/lib/api";
 import { UrgencyBadge } from "./UrgencyBadge";
 
 interface SocAnalystVuln {
@@ -30,7 +30,7 @@ export function SOCAnalystSection({
     setIsLoading(true);
     setError(null);
     try {
-      const res = await requestSocAnalysis({
+      const res = await fetchSocAnalysis({
         cveId: vuln.cveId,
         description: vuln.description,
         severity: vuln.severity,
@@ -40,11 +40,8 @@ export function SOCAnalystSection({
         assetType,
         cpeName: vuln.cpeName,
       });
-      if (res.success && res.data) {
-        setAnalysis(res.data);
-      } else {
-        setError(res.message || "Failed to generate analysis");
-      }
+      setAnalysis(res.data);
+      
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {

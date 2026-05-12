@@ -9,15 +9,17 @@ interface StatCardProps {
   sub?: string;
   trend?: "up" | "down" | "neutral";
   onClick?: () => void;
+  variant?: "solid" | "glass";
 }
 
-export function StatCard({ icon, label, value, sub, trend, onClick }: StatCardProps) {
+export function StatCard({ icon, label, value, sub, trend, onClick, variant = "solid" }: StatCardProps) {
   const Wrapper = onClick ? "button" : "div";
+  const bgClass = variant === "glass" ? "glass" : "bg-surface";
 
   return (
     <Wrapper
       onClick={onClick}
-      className={`bg-surface rounded-[16px] border border-border p-5 text-left transition-all duration-150 hover:shadow-[var(--shadow-card)] hover:-translate-y-0.5 ${
+      className={`${bgClass} rounded-[16px] border border-border p-5 text-left transition-all duration-150 hover:shadow-[var(--shadow-card)] hover:-translate-y-0.5 ${
         onClick ? "cursor-pointer" : ""
       }`}
     >

@@ -8,7 +8,7 @@ import {
   FiXCircle, FiBarChart2, FiServer, FiExternalLink, FiCopy,
   FiChevronDown, FiChevronUp, FiRefreshCw,
 } from "react-icons/fi";
-import { getScanById, type LatestScan, type ScanSeverity } from "@/lib/api";
+import { fetchScanById, type LatestScan, type ScanSeverity } from "@/lib/api";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -233,8 +233,8 @@ export default function ScanDetailPage() {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await getScanById(envId, scanId);
-      if (response.data) setScan(response.data);
+      const response = await fetchScanById(envId, scanId);
+      if (response) setScan(response.data);
       else setError("Failed to load scan details");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load scan");

@@ -1,4 +1,5 @@
 import { VulnSeverity } from "@prisma/client";
+import { ScanProgress } from "../scan-core/scan.types";
 
 interface CveData {
     cveId: string;
@@ -19,9 +20,15 @@ interface NvdCveResponse {
             id: string;
             descriptions: Array<{ value: string }>;
             metrics?: {
-                cvssMetricV31?: Array<{ cvssData: { baseScore: number; vectorString: string } }>;
-                cvssMetricV30?: Array<{ cvssData: { baseScore: number; vectorString: string } }>;
-                cvssMetricV2?: Array<{ cvssData: { baseScore: number; vectorString: string } }>;
+                cvssMetricV31?: Array<{
+                    cvssData: { baseScore: number; vectorString: string };
+                }>;
+                cvssMetricV30?: Array<{
+                    cvssData: { baseScore: number; vectorString: string };
+                }>;
+                cvssMetricV2?: Array<{
+                    cvssData: { baseScore: number; vectorString: string };
+                }>;
             };
             published: string;
             lastModified: string;
@@ -30,13 +37,13 @@ interface NvdCveResponse {
 }
 
 const NVD_API_KEY = process.env.NVD_API_KEY || "";
-const RATE_LIMIT_MS = NVD_API_KEY ? 600 : 6000;
+const RATE_LIMIT_MS = 6000;
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
 export const MAX_SCAN_LOOKBACK_YEARS = 5;
 
 let lastRequestTime = 0;
-const cveCache = new Map<string, { data: CveData[], timestamp: number }>();
+const cveCache = new Map<string, { data: CveData[]; timestamp: number }>();
 
 async function enforceRateLimit(): Promise<void> {
     const timeSinceLastRequest = Date.now() - lastRequestTime;
@@ -47,14 +54,24 @@ async function enforceRateLimit(): Promise<void> {
     lastRequestTime = Date.now();
 }
 
-function getCacheKey(cpeName: string, pubStartDate?: Date, pubEndDate?: Date): string {
+function getCacheKey(
+    cpeName: string,
+    pubStartDate?: Date,
+    pubEndDate?: Date,
+): string {
     if (!pubStartDate && !pubEndDate) return cpeName;
-    const start = pubStartDate ? pubStartDate.toISOString().split('T')[0] : 'beginning';
-    const end = pubEndDate ? pubEndDate.toISOString().split('T')[0] : 'now';
+    const start = pubStartDate
+        ? pubStartDate.toISOString().split("T")[0]
+        : "beginning";
+    const end = pubEndDate ? pubEndDate.toISOString().split("T")[0] : "now";
     return `${cpeName}:${start}:${end}`;
 }
 
-function isCacheValid(cpeName: string, pubStartDate?: Date, pubEndDate?: Date): boolean {
+function isCacheValid(
+    cpeName: string,
+    pubStartDate?: Date,
+    pubEndDate?: Date,
+): boolean {
     const cacheKey = getCacheKey(cpeName, pubStartDate, pubEndDate);
     const cached = cveCache.get(cacheKey);
     if (!cached) return false;
@@ -70,24 +87,38 @@ function mapV2ScoreToSeverity(score: number): VulnSeverity {
     return "UNKNOWN";
 }
 
-function extractCvssData(metrics: NvdCveResponse["vulnerabilities"][0]["cve"]["metrics"]): { score: number | null; vector: string | null; severity: VulnSeverity } {
+function extractCvssData(
+    metrics: NvdCveResponse["vulnerabilities"][0]["cve"]["metrics"],
+): { score: number | null; vector: string | null; severity: VulnSeverity } {
     if (!metrics) {
         return { score: null, vector: null, severity: "UNKNOWN" };
     }
 
     if (metrics.cvssMetricV31 && metrics.cvssMetricV31.length > 0) {
         const v31 = metrics.cvssMetricV31[0].cvssData;
-        return { score: v31.baseScore, vector: v31.vectorString, severity: mapV2ScoreToSeverity(v31.baseScore) };
+        return {
+            score: v31.baseScore,
+            vector: v31.vectorString,
+            severity: mapV2ScoreToSeverity(v31.baseScore),
+        };
     }
 
     if (metrics.cvssMetricV30 && metrics.cvssMetricV30.length > 0) {
         const v30 = metrics.cvssMetricV30[0].cvssData;
-        return { score: v30.baseScore, vector: v30.vectorString, severity: mapV2ScoreToSeverity(v30.baseScore) };
+        return {
+            score: v30.baseScore,
+            vector: v30.vectorString,
+            severity: mapV2ScoreToSeverity(v30.baseScore),
+        };
     }
 
     if (metrics.cvssMetricV2 && metrics.cvssMetricV2.length > 0) {
         const v2 = metrics.cvssMetricV2[0].cvssData;
-        return { score: v2.baseScore, vector: v2.vectorString, severity: mapV2ScoreToSeverity(v2.baseScore) };
+        return {
+            score: v2.baseScore,
+            vector: v2.vectorString,
+            severity: mapV2ScoreToSeverity(v2.baseScore),
+        };
     }
 
     return { score: null, vector: null, severity: "UNKNOWN" };
@@ -95,11 +126,13 @@ function extractCvssData(metrics: NvdCveResponse["vulnerabilities"][0]["cve"]["m
 
 const MAX_NVD_PAGES = 50;
 const RESULTS_PER_PAGE = 100;
+const MAX_WINDOW_DAYS = 119;
 
 export async function fetchCvesForCpe(
     cpeName: string,
     pubStartDate?: Date,
-    pubEndDate?: Date
+    pubEndDate?: Date,
+    onProgress?: (progress: ScanProgress) => void,
 ): Promise<CveData[]> {
     const cacheKey = getCacheKey(cpeName, pubStartDate, pubEndDate);
 
@@ -107,66 +140,122 @@ export async function fetchCvesForCpe(
         return cveCache.get(cacheKey)!.data;
     }
 
-    const headers: Record<string, string> = { "content-type": "application/json" };
+    const headers: Record<string, string> = {
+        "content-type": "application/json",
+    };
     if (NVD_API_KEY) headers["X-API-Key"] = NVD_API_KEY;
 
+    // Build 119-day windows covering the full requested range
+    const windowMs = MAX_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    const rangeStart = pubStartDate ?? getMaxLookbackDate();
+    const rangeEnd = pubEndDate ?? new Date();
+
+    const windows: { start: Date; end: Date }[] = [];
+    let cursor = rangeStart;
+    while (cursor < rangeEnd) {
+        const windowEnd = new Date(
+            Math.min(cursor.getTime() + windowMs, rangeEnd.getTime()),
+        );
+        windows.push({ start: new Date(cursor), end: windowEnd });
+        cursor = new Date(windowEnd.getTime() + 1);
+    }
+
+    const seenIds = new Set<string>();
     const allCveData: CveData[] = [];
-    let startIndex = 0;
-    let totalResults = 0;
-    let pagesFetched = 0;
 
     try {
-        do {
-            await enforceRateLimit();
+        for (const window of windows) {
+            let startIndex = 0;
+            let totalResults = 0;
+            let pagesFetched = 0;
 
-            const url = new URL("https://services.nvd.nist.gov/rest/json/cves/2.0");
-            url.searchParams.set("cpeName", cpeName);
-            url.searchParams.set("resultsPerPage", String(RESULTS_PER_PAGE));
-            url.searchParams.set("startIndex", String(startIndex));
-            if (pubStartDate) url.searchParams.set("pubStartDate", pubStartDate.toISOString());
-            if (pubEndDate)   url.searchParams.set("pubEndDate",   pubEndDate.toISOString());
+            do {
+                await enforceRateLimit();
 
-            const response = await fetch(url.toString(), { headers });
-            if (!response.ok) {
-                throw new Error(`NVD API error: ${response.status} ${response.statusText}`);
-            }
+                const url = new URL("https://services.nvd.nist.gov/rest/json/cves/2.0");
+                url.searchParams.set("virtualMatchString", cpeName);
+                url.searchParams.set("resultsPerPage", String(RESULTS_PER_PAGE));
+                url.searchParams.set("startIndex", String(startIndex));
+                url.searchParams.set("pubStartDate", window.start.toISOString());
+                url.searchParams.set("pubEndDate", window.end.toISOString());
 
-            const data: NvdCveResponse = await response.json();
+                let response: Response | null = null;
+                const MAX_RETRIES = 3;
+                for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                    response = await fetch(url.toString(), { headers });
 
-            if (pagesFetched === 0) {
-                totalResults = data.totalResults ?? 0;
-                console.log(`[NVD] CPE ${cpeName}: ${totalResults} total CVEs`);
-            }
+                    if (response.status === 429) {
+                        const retryAfter = response.headers.get("Retry-After");
+                        const waitMs = Math.max(retryAfter ? parseInt(retryAfter) * 1000 : 30_000, 3_000);
+                        console.warn(
+                            `[NVD] Rate limited. Waiting ${waitMs / 1000}s before retry (attempt ${attempt + 1}/${MAX_RETRIES})`,
+                        );
+                        onProgress?.({stage: "info", message: `Rate limited by NVD API. Retrying in ${waitMs / 1000} seconds...`});
+                        await new Promise((resolve) => setTimeout(resolve, waitMs));
+                        continue;
+                    }
 
-            const page: CveData[] = (data.vulnerabilities || []).map((vuln) => {
-                const cve = vuln.cve;
-                const { score, vector, severity } = extractCvssData(cve.metrics);
-                return {
-                    cveId: cve.id,
-                    description: cve.descriptions[0]?.value ?? "No description",
-                    cvssScore: score,
-                    cvssVector: vector,
-                    severity,
-                    publishedDate:      cve.published    ? new Date(cve.published)    : null,
-                    lastModifiedDate:   cve.lastModified ? new Date(cve.lastModified) : null,
-                };
-            });
+                    break;
+                }
 
-            allCveData.push(...page);
-            startIndex += RESULTS_PER_PAGE;
-            pagesFetched++;
+                if (!response || response.status === 429) {
+                    throw new Error(
+                        `NVD API error: rate limited after ${MAX_RETRIES} retries`,
+                    );
+                }
 
-            if (page.length < RESULTS_PER_PAGE) break;
+                if (response.status === 404) {
+                    break;
+                }
 
-        } while (startIndex < totalResults && pagesFetched < MAX_NVD_PAGES);
+                if (!response.ok) {
+                    throw new Error(
+                        `NVD API error: ${response.status} ${response.statusText}`,
+                    );
+                }
 
-        if (pagesFetched >= MAX_NVD_PAGES) {
-            console.warn(`[NVD] CPE ${cpeName}: hit ${MAX_NVD_PAGES}-page safety cap (${allCveData.length}/${totalResults} CVEs fetched)`);
+                const data: NvdCveResponse = await response.json();
+
+                if (pagesFetched === 0) {
+                    totalResults = data.totalResults ?? 0;
+                    const windowLabel = `${window.start.toISOString().split("T")[0]} → ${window.end.toISOString().split("T")[0]}`;
+                    console.log(`[NVD] CPE ${cpeName} [${windowLabel}]: ${totalResults} CVEs`);
+                    onProgress?.({stage: "info", message: `Found ${totalResults} CVEs for CPE ${cpeName} in date range ${windowLabel}`});
+
+                }
+
+                const page: CveData[] = (data.vulnerabilities || []).map((vuln) => {
+                    const cve = vuln.cve;
+                    const { score, vector, severity } = extractCvssData(cve.metrics);
+                    return {
+                        cveId: cve.id,
+                        description: cve.descriptions[0]?.value ?? "No description",
+                        cvssScore: score,
+                        cvssVector: vector,
+                        severity,
+                        publishedDate: cve.published ? new Date(cve.published) : null,
+                        lastModifiedDate: cve.lastModified
+                            ? new Date(cve.lastModified)
+                            : null,
+                    };
+                });
+
+                for (const cve of page) {
+                    if (!seenIds.has(cve.cveId)) {
+                        seenIds.add(cve.cveId);
+                        allCveData.push(cve);
+                    }
+                }
+
+                startIndex += RESULTS_PER_PAGE;
+                pagesFetched++;
+
+                if (page.length < RESULTS_PER_PAGE) break;
+            } while (startIndex < totalResults && pagesFetched < MAX_NVD_PAGES);
         }
 
         cveCache.set(cacheKey, { data: allCveData, timestamp: Date.now() });
         return allCveData;
-
     } catch (error) {
         console.error(`[NVD] Error fetching CVEs for CPE ${cpeName}:`, error);
         throw error;

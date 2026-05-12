@@ -41,7 +41,6 @@ export async function getDashboardOverview(environmentId: string): Promise<Dashb
       where: {
         environmentId,
         status: ScanStatus.COMPLETED,
-        ...whereNotMock,
       },
       orderBy: { completedAt: "desc" },
       include: {

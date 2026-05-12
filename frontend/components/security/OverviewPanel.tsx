@@ -10,7 +10,6 @@ import { Card, SectionHeader, StatCard } from "./SecurityUI";
 import { INACTIVE_STATUSES, typeIcons } from "@/lib/securityConstants";
 import type { AssetScan as AssetScanItem, ScanHistoryItem } from "@/lib/api";
 
-
 function RiskSentence({
   total,
   critical,

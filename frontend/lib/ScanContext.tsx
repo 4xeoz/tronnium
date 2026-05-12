@@ -1,19 +1,17 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, ReactNode, useRef } from "react";
-import { startScan as apiStartScan, type ScanResult } from "./api/scans";
+import { startScan as apiStartScan, listenForScanProgress, type ScanResult } from "./api/scans";
 import ScanSettingsModal from "@/components/scan/ScanSettingsModal";
 
 interface ScanContextType {
-  // State
   isScanning: boolean;
-  progress: string;
+  progressMessages: string[];
   scanResult: ScanResult | null;
   error: string | null;
   environmentId: string | null;
   showConfigModal: boolean;
-  
-  // Actions
+
   startScan: (environmentId: string, fromDate?: string) => void;
   configureAndStartScan: (environmentId: string) => void;
   closeConfigModal: () => void;
@@ -26,14 +24,13 @@ const ScanContext = createContext<ScanContextType | undefined>(undefined);
 
 export function ScanProvider({ children }: { children: ReactNode }) {
   const [isScanning, setIsScanning] = useState(false);
-  const [progress, setProgress] = useState<string>("");
+  const [progressMessages, setProgressMessages] = useState<string[]>([]);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [environmentId, setEnvironmentId] = useState<string | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [pendingEnvId, setPendingEnvId] = useState<string | null>(null);
-  
-  // Use ref to track EventSource so it persists across renders
+
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const stopScan = useCallback(() => {
@@ -42,44 +39,65 @@ export function ScanProvider({ children }: { children: ReactNode }) {
       eventSourceRef.current = null;
     }
     setIsScanning(false);
-    setProgress("");
+    setProgressMessages([]);
   }, []);
 
   const startScan = useCallback((envId: string, fromDate?: string) => {
-    // Close any existing scan first
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
 
     setEnvironmentId(envId);
     setIsScanning(true);
-    setProgress("Initializing scan...");
+    setProgressMessages(["Initializing scan..."]);
     setError(null);
     setScanResult(null);
     setShowConfigModal(false);
 
-    // Start new SSE connection with optional fromDate
-    const eventSource = apiStartScan(
-      envId,
-      fromDate,
-      (message) => {
-        setProgress(message);
-      },
-      (result) => {
-        setScanResult(result);
-        setIsScanning(false);
-        setProgress("Scan completed!");
-        eventSourceRef.current = null;
-      },
-      (err) => {
-        setError(err);
-        setIsScanning(false);
-        setProgress("");
-        eventSourceRef.current = null;
-      }
-    );
+    console.log("[Scan] Starting scan for env:", envId, "fromDate:", fromDate);
+    apiStartScan(envId, fromDate)
+      .then((res) => {
+        console.log("[Scan] POST /start response:", res);
+        if (!res.success) {
+          console.error("[Scan] Start failed:", res.message);
+          setError(res.message || "Failed to start scan");
+          setIsScanning(false);
+          setProgressMessages([]);
+          return;
+        }
 
-    eventSourceRef.current = eventSource;
+        const { scanId, alreadyRunning } = res.data;
+        console.log("[Scan] Got scanId:", scanId, "alreadyRunning:", alreadyRunning);
+        const eventSource = listenForScanProgress(
+          envId,
+          scanId,
+          (message) => {
+            console.log("[Scan] Progress message:", message);
+            setProgressMessages((prev) => [...prev, message]);
+          },
+          () => {
+            console.log("[Scan] Scan completed!");
+            setIsScanning(false);
+            setProgressMessages((prev) => [...prev, "Scan completed!"]);
+            eventSourceRef.current = null;
+          },
+          (err) => {
+            console.error("[Scan] SSE error:", err);
+            setError(err);
+            setIsScanning(false);
+            setProgressMessages([]);
+            eventSourceRef.current = null;
+          }
+        );
+        console.log("[Scan] EventSource created, readyState:", eventSource.readyState);
+        eventSourceRef.current = eventSource;
+      })
+      .catch((err) => {
+        console.error("[Scan] POST /start threw:", err);
+        setError(err instanceof Error ? err.message : "Failed to start scan");
+        setIsScanning(false);
+        setProgressMessages([]);
+      });
   }, []);
 
   const configureAndStartScan = useCallback((envId: string) => {
@@ -88,14 +106,13 @@ export function ScanProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const closeConfigModal = useCallback(() => {
-    // Hide first (triggers slide-out animation), then unmount after transition completes
     setShowConfigModal(false);
     setTimeout(() => setPendingEnvId(null), 300);
   }, []);
 
   const clearResult = useCallback(() => {
     setScanResult(null);
-    setProgress("");
+    setProgressMessages([]);
     setError(null);
   }, []);
 
@@ -107,7 +124,7 @@ export function ScanProvider({ children }: { children: ReactNode }) {
     <ScanContext.Provider
       value={{
         isScanning,
-        progress,
+        progressMessages,
         scanResult,
         error,
         environmentId,
@@ -121,7 +138,6 @@ export function ScanProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-      {/* Keep mounted while pendingEnvId exists so the slide-out animation can play */}
       {pendingEnvId && (
         <ScanSettingsModal
           environmentId={pendingEnvId}

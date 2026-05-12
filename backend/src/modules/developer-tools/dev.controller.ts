@@ -165,20 +165,7 @@ export async function getMockVulnerabilityStatsHandler(
       },
     });
 
-    const totalCount = await prisma.vulnerability.count({
-      where: {
-        isMock: true,
-        assetVulnerabilities: {
-          some: {
-            assetScan: {
-              scan: {
-                environmentId,
-              },
-            },
-          },
-        },
-      },
-    });
+    const totalCount = stats.reduce((sum, s) => sum + s._count.id, 0);
 
     res.json(
       ok({ total: totalCount, bySeverity: stats })

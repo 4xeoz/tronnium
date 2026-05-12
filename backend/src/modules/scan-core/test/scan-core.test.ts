@@ -2,6 +2,11 @@ import request from "supertest";
 import { createApp } from "../../../app";
 import { seedTestUser, clearTestData, seedTestScan } from "../../../test/helper";
 import { afterAll, beforeAll, describe, it, expect } from "@jest/globals";
+import { jest } from "@jest/globals";
+
+jest.mock("@xenova/transformers", () => ({
+  pipeline: jest.fn(),
+}));
 
 const app = createApp();
 
@@ -252,6 +257,8 @@ describe("Scan Core API", () => {
             const res = await request(app)
                 .get(`/scans/${envId}/latest`)
                 .set("Authorization", `Bearer ${token}`);
+
+                console.log("Latest scan response:", res.body); // --- IGNORE ---
 
             expect(res.status).toBe(200);
             expect(res.body.data).toHaveProperty("id", scan.id);

@@ -7,7 +7,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useUser } from "@/lib/UserContext";
 import { useScan } from "@/lib/ScanContext";
 import ThemeToggle from "@/components/ui/ThemeToggle";
-import ScanProgressPopup from "@/components/scan/ScanProgressPopup";
 import { FiBox, FiSettings, FiLogOut, FiBell, FiUser, FiArrowLeft, FiMap, FiGrid, FiShield, FiCode } from "react-icons/fi";
 
 interface AppLayoutProps {
@@ -223,9 +222,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <main className="flex-1 bg-background ml-[240px] overflow-auto">
                 {children}
             </main>
-
-            {/* Scan Progress Popup */}
-            <ScanProgressPopup />
         </div>
     );
 }

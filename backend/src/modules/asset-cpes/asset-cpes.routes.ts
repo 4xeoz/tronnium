@@ -4,9 +4,13 @@ import { jwtAuthGuard } from "../authentication/public";
 
 const router = Router();
 
-router.get("/cpe/semantic-search", cpeSemanticSearchHandler);
-router.get("/cpe/semantic-search-raw", cpeSemanticSearchRawHandler);
-router.get("/cpe/find", jwtAuthGuard(), cpeFindHandler);
-router.post("/cpe/validate", jwtAuthGuard(), cpeValidateHandler);
+router.get("/cpe/find", cpeFindHandler);
+
+
+router.use(jwtAuthGuard());
+
+router.post("/cpe/semantic-search", cpeSemanticSearchHandler);
+router.post("/cpe/semantic-search-raw", cpeSemanticSearchRawHandler);
+router.post("/cpe/validate", cpeValidateHandler);
 
 export const assetCpesRouter = router;

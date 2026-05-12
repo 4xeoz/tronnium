@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useState, useEffect, useRef } from "react";
 import {
   FiX,
@@ -12,18 +13,17 @@ import {
   FiCheckCircle,
 } from "react-icons/fi";
 import {
-  updateWorkflow,
-  getOrCreateWorkflow,
-  getStatusLabel,
+  updateVulnerabilityWorkflow,
+  getOrCreateVulnerabilityWorkflow,
   VULN_STATUSES,
   type WorkflowItem,
-  type VulnStatus,
-} from "@/lib/api/vulnerabilityWorkflow";
+  type VulnStatus} from "@/lib/api/vulnerabilityWorkflow";
 import type { ScanSeverity } from "@/lib/api";
 import { useUser } from "@/lib/UserContext";
 import { AgeBadge } from "./SecurityUI";
 import { getDaysOpen } from "@/lib/vulnAge";
 import { STATUS_COLORS as SHARED_STATUS_COLORS, formatDate, getInitials } from "@/lib/securityConstants";
+import { getStatusLabel } from "@/lib/formatters";
 import { SOCAnalystSection } from "./SOCAnalystSection";
 
 export type SelectedVuln = {
@@ -49,7 +49,6 @@ const SEVERITY_TEXT: Record<string, string> = {
   LOW:      "text-info-text",
   UNKNOWN:  "text-text-muted",
 };
-
 
 export default function VulnDetailSlideOver({
   vuln,
@@ -92,13 +91,13 @@ export default function VulnDetailSlideOver({
   // Ensure a workflow record exists before saving
   const ensureWorkflow = async (): Promise<WorkflowItem | null> => {
     if (workflow) return workflow;
-    const res = await getOrCreateWorkflow(
+    const res = await getOrCreateVulnerabilityWorkflow(
       environmentId,
       vuln.assetId,
       vuln.vulnerabilityId,
       vuln.cpeName
     );
-    if (res.data) {
+    if (res && res.data) {
       setWorkflow(res.data);
       onWorkflowSaved(res.data);
       return res.data;
@@ -111,8 +110,8 @@ export default function VulnDetailSlideOver({
     try {
       const wf = await ensureWorkflow();
       if (!wf) return;
-      const res = await updateWorkflow(wf.id, patch);
-      if (res.data) {
+      const res = await updateVulnerabilityWorkflow(wf.id, patch);
+      if (res && res.data) {
         setWorkflow(res.data);
         setNotes(res.data.notes || "");
         onWorkflowSaved(res.data);

@@ -86,6 +86,7 @@ async function processAssetScan(
   asset: any,
   environmentId: string,
   pubStartDate: Date | undefined,
+  pubEndDate: Date | undefined,
   onProgress?: (progress: ScanProgress) => void
 ): 
 Promise<{
@@ -113,7 +114,7 @@ Promise<{
     const cpeName = typeof cpeItem === "string" ? cpeItem : cpeItem.cpeName;
 
     try {
-      const cves = await fetchCvesForCpe(cpeName, pubStartDate);
+      const cves = await fetchCvesForCpe(cpeName, pubStartDate, pubEndDate, onProgress);
 
       for (const cve of cves) {
         const vulnerability = await prisma.vulnerability.upsert({
@@ -188,7 +189,9 @@ const epssVulns: Array<{ cvssScore: number | null; epssScore: number | null }> =
 try {
   const cveIds = upsertedVulns.map(v => v.cveId);
   if (cveIds.length > 0) {
+    onProgress?.({ stage: "scanning", message: `Fetching EPSS risk scores for ${cveIds.length} CVEs...` });  // ← add
     const epssMap = await fetchEpssForCves(cveIds);
+    onProgress?.({ stage: "scanning", message: `EPSS enrichment complete` });  // ← add
     await Promise.all(upsertedVulns.map(async (v) => {
       const epss = epssMap.get(v.cveId);
       if (epss) {
@@ -302,24 +305,17 @@ async function finalizeScan(
 
 export async function runScan(
   environmentId: string,
+  scanId: string,
   options: ScanOptions = {},
   onProgress?: (progress: ScanProgress) => void
 ): Promise<ScanResult> {
   const pubStartDate = await resolveScanFromDate(environmentId, options.fromDate);
 
-  const scan = await prisma.securityScan.create({
-    data: {
-      environmentId,
-      status: ScanStatus.IN_PROGRESS,
-      startedAt: new Date(),
-    },
-  });
-
   try {
     const assets = await fetchScannableAssets(environmentId);
 
     await prisma.securityScan.update({
-      where: { id: scan.id },
+      where: { id: scanId },
       data: { totalAssets: assets.length },
     });
 
@@ -338,7 +334,7 @@ export async function runScan(
         message: `Scanning ${asset.name} (${i + 1}/${assets.length})...`,
       });
 
-      const result = await processAssetScan(scan.id, asset, environmentId, pubStartDate, onProgress);
+      const result = await processAssetScan(scanId, asset, environmentId, pubStartDate, undefined , onProgress);
 
       allEpssVulns.push(...result.epssVulns);
 
@@ -351,7 +347,7 @@ export async function runScan(
     }
 
     return await finalizeScan(
-      scan.id,
+      scanId,
       assets.length,
       scannedAssets,
       vulnerabilitiesFound,
@@ -361,14 +357,14 @@ export async function runScan(
     );
   } catch (error) {
     await prisma.securityScan.update({
-      where: { id: scan.id },
+      where: { id: scanId },
       data: {
         status: ScanStatus.FAILED,
         completedAt: new Date(),
       },
     });
 
-    console.error(`Scan ${scan.id} failed:`, error);
+    console.error(`Scan ${scanId} failed:`, error);
     throw error;
   }
 }
@@ -377,10 +373,10 @@ export async function getLatestScan(environmentId: string) {
   return await prisma.securityScan.findFirst({
     where: {
       environmentId,
-      status: ScanStatus.COMPLETED,
+      status: { in: [ScanStatus.COMPLETED, ScanStatus.IN_PROGRESS] },
       ...whereNotMock,
     },
-    orderBy: { completedAt: "desc" },
+    orderBy: { createdAt: "desc" },
     include: SCAN_WITH_ASSETS_INCLUDE,
   });
 }

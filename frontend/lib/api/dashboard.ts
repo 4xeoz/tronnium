@@ -1,4 +1,9 @@
-import { apiFetch } from "./client";
+/**
+ * Dashboard API - Overview data for environment dashboards
+ * Each function returns exactly what the backend sends, unwrapped.
+ */
+
+import { apiFetch, ApiResponse } from "./client";
 
 export interface DashboardOverview {
   openCriticalHigh: { critical: number; high: number };
@@ -21,6 +26,6 @@ export interface DashboardOverview {
   }[];
 }
 
-export async function getDashboardOverview(environmentId: string) {
+export async function fetchDashboardOverview(environmentId: string): Promise<ApiResponse<DashboardOverview>> {
   return apiFetch<DashboardOverview>(`/dashboard/${environmentId}/overview`);
 }
