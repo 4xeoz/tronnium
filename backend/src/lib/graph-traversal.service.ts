@@ -11,7 +11,7 @@ import {
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const DEFAULT_BUDGET = 50;
+const DEFAULT_BUDGET = 10;
 
 /**
  * Compromise score decay per security-criticality level.
@@ -254,17 +254,25 @@ export type EnvironmentBlastRadius = {
  * the worst-case compromise and knowledge scores per asset.
  *
  * @param environmentId  UUID of the environment to analyze
- * @param config         Optional config (budget)
+ * @param config         Optional config (budget, epssThreshold)
  * @returns EnvironmentBlastRadius — every asset with its max scores
  */
 export async function computeEnvironmentBlastRadius(
   environmentId: string,
-  config: { budget?: number } = {}
+  config: { budget?: number; epssThreshold?: number } = {}
 ): Promise<EnvironmentBlastRadius> {
   const budget = config.budget ?? DEFAULT_BUDGET;
 
   // Phase 3: Load all data into memory
-  const vulnProfiles = await loadAssetVulnProfiles(environmentId);
+  let vulnProfiles = await loadAssetVulnProfiles(environmentId);
+
+  // Optional: filter to assets whose max EPSS meets the threshold
+  if (typeof config.epssThreshold === "number" && !isNaN(config.epssThreshold)) {
+    vulnProfiles = new Map(
+      [...vulnProfiles].filter(([, p]) => p.maxEpss >= config.epssThreshold!)
+    );
+  }
+
   const adjList = await loadAdjacencyList(environmentId);
   const entryPoints = await findEntryPoints(environmentId, vulnProfiles);
 

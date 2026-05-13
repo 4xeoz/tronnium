@@ -284,11 +284,12 @@ function computeVulnMultiplier(
     multiplier = 2.0;
   }
 
-  // Additional penalty if any vuln requires user interaction
-  const requiresUI = profile.classifications.some(
-    (c) => c.requiresUserInteraction
-  );
-  if (requiresUI) {
+  // Penalty only when every pivot-capable vuln requires user interaction.
+  // If even one clean (UI:N) exploit exists, the attacker uses that one.
+  const pivotVulns = profile.classifications.filter((c) => c.enablesNetworkPivot);
+  const allPivotsNeedUI =
+    pivotVulns.length > 0 && pivotVulns.every((c) => c.requiresUserInteraction);
+  if (allPivotsNeedUI) {
     multiplier *= 1.5;
   }
 

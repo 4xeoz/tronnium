@@ -92,10 +92,18 @@ const Page = () => {
         hops: node.hops,
       })
     }
+    // Only mark an asset as gated if it has no reachable path at all.
+    // An asset may appear in gatedEdges via one edge but be reachable through another.
+    const reachableIds = new Set(map.keys())
+    const gatedIds = new Set(
+      blastRadius.gatedEdges
+        .map(g => g.toAssetId)
+        .filter(id => !reachableIds.has(id))
+    )
     return {
       sourceId: blastRadius.sourceAssetId,
       reachableMap: map,
-      gatedIds: new Set(blastRadius.gatedEdges.map(g => g.toAssetId)),
+      gatedIds,
     }
   }, [blastRadius])
 
@@ -168,9 +176,8 @@ const Page = () => {
   })
 
   const updatePositionMutation = useMutation({
-    mutationFn: ({assetId, x, y}: {assetId: string, x: number, y: number}) => {
-      console.log('[Map] Saving position to backend:', assetId, { x, y })  // ← add
-      return updateAssetPosition(envId, assetId, x, y)},
+    mutationFn: ({assetId, x, y}: {assetId: string, x: number, y: number}) =>
+      updateAssetPosition(envId, assetId, x, y),
     onError: (err) => {
       const msg = err instanceof Error ? err.message : 'Failed to update asset position'
       setError(msg)
@@ -236,7 +243,7 @@ const Page = () => {
         isAnalysisModeActive: !!analysisAssetId,
       },
     })) as Node[]
-  }, [ResponseOfAssets, assetVulnMap, entryPointIds, riskOverlay])
+  }, [ResponseOfAssets, assetVulnMap, entryPointIds, riskOverlay, analysisAssetId])
 
   const relationshipEdges = useMemo(() => {
     if (!ResponseOfrelationships) return [] as Edge[]
@@ -313,7 +320,6 @@ const Page = () => {
   }, [])
 
   const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
-    console.log('[Map] Drag stopped for', node.id, '→', node.position)
     updatePositionMutation.mutate({ assetId: node.id, x: node.position.x, y: node.position.y })
   }, [updatePositionMutation])
 

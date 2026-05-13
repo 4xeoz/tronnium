@@ -1,21 +1,13 @@
 import { apiFetch } from "./client"
 
-export interface VulnProfile {
-  maxCvss: number
-  maxEpss: number
-  hasNetworkPivot: boolean
-  hasCredentialTheft: boolean
-  isPhysicalAccessOnly: boolean
-}
-
 export interface EntryPoint {
   id: string
   name: string
   type: string
-  domain: string
   isExternallyFacing: boolean
-  vulnProfile: VulnProfile
-  baseRisk: number      // 0–100, source node's initial risk score
+  baseCompromiseScore: number   // 0–100, EPSS-adjusted score of best network-pivot vuln
+  hasNetworkPivot: boolean
+  hasCredentialTheft: boolean
 }
 
 export interface ReachableNode {

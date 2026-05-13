@@ -9,7 +9,6 @@ import {
 } from "../../lib/graph-traversal.service";
 import {
   loadAssetVulnProfiles,
-  loadAdjacencyList,
   findEntryPoints,
 } from "../../lib/graph-data.service";
 
@@ -286,81 +285,10 @@ export async function getBlastRadiusHandler(req: Request, res: Response) {
       ? parseFloat(req.query.epssThreshold as string)
       : undefined;
 
-    let result = await computeEnvironmentBlastRadius(environmentId, {
+    const result = await computeEnvironmentBlastRadius(environmentId, {
       budget: costBudget,
+      epssThreshold,
     });
-
-    // Optional EPSS filtering: drop assets whose max EPSS is below threshold
-    if (typeof epssThreshold === "number" && !isNaN(epssThreshold)) {
-      for (const [assetId, risk] of result.assetRisks) {
-        // We don't have per-asset EPSS in the aggregated result,
-        // so we reload profiles and filter post-hoc.
-        // For performance, this is acceptable for the API layer.
-      }
-      // Re-compute with filtered profiles for accurate results
-      const vulnProfiles = await loadAssetVulnProfiles(environmentId);
-      const filteredProfiles = new Map(
-        [...vulnProfiles].filter(([, p]) => p.maxEpss >= epssThreshold)
-      );
-      const adjList = await loadAdjacencyList(environmentId);
-      const entryPoints = await findEntryPoints(environmentId, filteredProfiles);
-
-      const perRunResults = entryPoints.map((ep) =>
-        runWeightedTraversal([ep], adjList, filteredProfiles, costBudget)
-      );
-
-      // Re-aggregate (same logic as computeEnvironmentBlastRadius)
-      const assetRisks = new Map();
-      for (const run of perRunResults) {
-        const ep = run.entryPoints[0];
-        for (const [assetId, node] of run.reached) {
-          let risk = assetRisks.get(assetId);
-          if (!risk) {
-            risk = {
-              assetId,
-              maxCompromiseScore: 0,
-              maxKnowledgeScore: 0,
-              reachableFromEntryPoints: [],
-            };
-            assetRisks.set(assetId, risk);
-          }
-          risk.maxCompromiseScore = Math.max(
-            risk.maxCompromiseScore,
-            node.compromiseScore
-          );
-          risk.maxKnowledgeScore = Math.max(
-            risk.maxKnowledgeScore,
-            node.knowledgeScore
-          );
-          if (!risk.reachableFromEntryPoints.includes(ep)) {
-            risk.reachableFromEntryPoints.push(ep);
-          }
-        }
-      }
-
-      const allAssets = await prisma.asset.findMany({
-        where: { environmentId },
-        select: { id: true },
-      });
-      for (const asset of allAssets) {
-        if (!assetRisks.has(asset.id)) {
-          assetRisks.set(asset.id, {
-            assetId: asset.id,
-            maxCompromiseScore: 0,
-            maxKnowledgeScore: 0,
-            reachableFromEntryPoints: [],
-          });
-        }
-      }
-
-      result = {
-        environmentId,
-        assetRisks,
-        entryPoints,
-        runs: perRunResults.length,
-        totalAssetsReached: assetRisks.size,
-      };
-    }
 
     // Convert Map → array sorted by descending compromise score
     const sortedRisks = [...result.assetRisks.values()].sort(

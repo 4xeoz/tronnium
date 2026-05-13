@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { FiX, FiLock, FiChevronDown, FiChevronRight, FiActivity, FiServer, FiDatabase, FiWifi, FiShield, FiHardDrive, FiCpu } from "react-icons/fi";
 import type { Asset } from "@/lib/api";
 import type { BlastRadiusResult, BlastRadiusConfig } from "@/lib/api/graph";
@@ -45,6 +45,7 @@ export default function BlastRadiusSidebar({
 }: BlastRadiusSidebarProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [budgetValue, setBudgetValue] = useState(result.budget ?? 10);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sourceAsset = assets.find((a) => a.id === result.sourceAssetId);
 
@@ -66,7 +67,10 @@ export default function BlastRadiusSidebar({
 
   const handleBudgetChange = (value: number) => {
     setBudgetValue(value);
-    onConfigChange({ costBudget: value });
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      onConfigChange({ costBudget: value });
+    }, 400);
   };
 
   return (
