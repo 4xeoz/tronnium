@@ -159,15 +159,17 @@ export async function seedEnvironment(
   });
 }
 
-export function listSeedTemplates(): Pick<
-  SeedTemplate,
-  "id" | "name" | "description" | "longDescription" | "tags"
->[] {
-  return SEED_TEMPLATES.map(({ id, name, description, longDescription, tags }) => ({
+export function listSeedTemplates() {
+  return SEED_TEMPLATES.map(({ id, name, description, longDescription, tags, assets, relationships }) => ({
     id,
     name,
     description,
     longDescription,
     tags,
+    stats: {
+      assets: assets.length,
+      vulnerabilities: assets.reduce((sum, a) => sum + (a.vulns?.length ?? 0), 0),
+      relationships: relationships.length,
+    },
   }));
 }

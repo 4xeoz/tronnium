@@ -14,9 +14,11 @@ import {
   FiMoreHorizontal,
   FiEye,
   FiZap,
-  FiTag,
   FiLoader,
   FiCheckCircle,
+  FiInfo,
+  FiServer,
+  FiCpu,
 } from "react-icons/fi";
 import { fetchEnvironments, deleteEnvironment, type Environment } from "@/lib/api";
 import CreateEnvironmentSlideOver from "@/components/environments/CreateEnvironmentSlideOver";
@@ -177,6 +179,23 @@ function EnvironmentRow({
   );
 }
 
+// ── Per-template visual config ────────────────────────────────────────────────
+
+const TEMPLATE_CONFIG: Record<string, {
+  icon: React.ElementType;
+  domain: string;
+  iconBg: string;
+  iconColor: string;
+  domainBg: string;
+  domainText: string;
+}> = {
+  "enterprise-it":       { icon: FiServer,   domain: "IT", iconBg: "bg-blue-500/10",   iconColor: "text-blue-400",   domainBg: "bg-blue-500/10",   domainText: "text-blue-400"   },
+  "cloud-microservices": { icon: FiLayers,   domain: "IT", iconBg: "bg-indigo-500/10", iconColor: "text-indigo-400", domainBg: "bg-indigo-500/10", domainText: "text-indigo-400" },
+  "zero-trust-failure":  { icon: FiShield,   domain: "IT", iconBg: "bg-rose-500/10",   iconColor: "text-rose-400",   domainBg: "bg-rose-500/10",   domainText: "text-rose-400"   },
+  "ot-power-grid":       { icon: FiZap,      domain: "OT", iconBg: "bg-amber-500/10",  iconColor: "text-amber-400",  domainBg: "bg-amber-500/10",  domainText: "text-amber-400"  },
+  "ot-manufacturing":    { icon: FiCpu,      domain: "OT", iconBg: "bg-orange-500/10", iconColor: "text-orange-400", domainBg: "bg-orange-500/10", domainText: "text-orange-400" },
+};
+
 const TAG_COLORS: Record<string, string> = {
   IT: "bg-blue-500/10 text-blue-400",
   OT: "bg-amber-500/10 text-amber-400",
@@ -184,6 +203,8 @@ const TAG_COLORS: Record<string, string> = {
   web: "bg-sky-500/10 text-sky-400",
   database: "bg-emerald-500/10 text-emerald-400",
   cloud: "bg-indigo-500/10 text-indigo-400",
+  containers: "bg-cyan-500/10 text-cyan-400",
+  microservices: "bg-indigo-500/10 text-indigo-400",
   "CI/CD": "bg-pink-500/10 text-pink-400",
   secrets: "bg-rose-500/10 text-rose-400",
   "zero-trust": "bg-orange-500/10 text-orange-400",
@@ -193,23 +214,217 @@ const TAG_COLORS: Record<string, string> = {
   MES: "bg-amber-500/10 text-amber-400",
   safety: "bg-yellow-500/10 text-yellow-400",
   robots: "bg-lime-500/10 text-lime-400",
+  manufacturing: "bg-orange-500/10 text-orange-400",
+  "credential-theft": "bg-rose-500/10 text-rose-400",
+};
+
+type SeedResultEntry = {
+  environmentId: string;
+  environmentName: string;
+  summary: { assets: number; vulnerabilities: number; relationships: number };
 };
 
 function TemplateTag({ tag }: { tag: string }) {
   const cls = TAG_COLORS[tag] ?? "bg-surface-secondary text-text-muted";
   return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>
       {tag}
     </span>
   );
 }
 
+function StatChip({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="bg-background-secondary rounded-lg p-2.5 text-center flex-1">
+      <div className="text-sm font-bold text-text-primary tabular-nums">{value}</div>
+      <div className="text-[10px] text-text-muted mt-0.5">{label}</div>
+    </div>
+  );
+}
+
+function TemplateCard({
+  template,
+  onSeed,
+  isSeeding,
+  anySeeding,
+  result,
+  onNavigate,
+  onSeedAgain,
+}: {
+  template: SeedTemplate;
+  onSeed: () => void;
+  isSeeding: boolean;
+  anySeeding: boolean;
+  result: SeedResultEntry | null;
+  onNavigate: (envId: string, path: string) => void;
+  onSeedAgain: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const cfg = TEMPLATE_CONFIG[template.id] ?? {
+    icon: FiBox,
+    domain: "IT",
+    iconBg: "bg-surface-secondary",
+    iconColor: "text-text-muted",
+    domainBg: "bg-surface-secondary",
+    domainText: "text-text-muted",
+  };
+  const Icon = cfg.icon;
+
+  // ── Success state ──────────────────────────────────────────────────────────
+  if (result) {
+    return (
+      <div className="rounded-[16px] border border-green-500/25 bg-surface p-5 flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-green-500/10">
+            <FiCheckCircle className="w-4 h-4 text-green-400" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-text-primary">Environment ready</p>
+            <p className="text-xs text-text-muted">{result.environmentName}</p>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <StatChip value={result.summary.assets} label="assets" />
+          <StatChip value={result.summary.vulnerabilities} label="vulnerabilities" />
+          <StatChip value={result.summary.relationships} label="edges" />
+        </div>
+
+        <p className="text-xs text-text-muted leading-relaxed">
+          The environment is fully configured. Open the Asset Map to run blast radius analysis and explore attack paths, or start at the Dashboard for a vulnerability overview.
+        </p>
+
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => onNavigate(result.environmentId, "map")}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-brand-1 text-white text-xs font-semibold hover:opacity-90 transition-opacity active:scale-[0.98]"
+          >
+            <FiActivity className="w-3.5 h-3.5" />
+            Open Asset Map & Attack Paths
+          </button>
+          <button
+            onClick={() => onNavigate(result.environmentId, "dashboard")}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-background-secondary text-text-primary text-xs font-medium hover:bg-surface-secondary transition-colors active:scale-[0.98]"
+          >
+            <FiShield className="w-3.5 h-3.5" />
+            Go to Dashboard
+          </button>
+        </div>
+
+        <button
+          onClick={onSeedAgain}
+          className="text-[11px] text-text-muted hover:text-text-primary transition-colors text-center"
+        >
+          Seed another copy of this template
+        </button>
+      </div>
+    );
+  }
+
+  // ── Seeding state ──────────────────────────────────────────────────────────
+  if (isSeeding) {
+    return (
+      <div className="rounded-[16px] border border-border bg-surface p-5 flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${cfg.iconBg}`}>
+            <Icon className={`w-4 h-4 ${cfg.iconColor}`} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-text-primary">{template.name}</p>
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded inline-block mt-0.5 ${cfg.domainBg} ${cfg.domainText}`}>
+              {cfg.domain}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center justify-center py-8 gap-4">
+          <div className="w-8 h-8 border-2 border-brand-1 border-t-transparent rounded-full animate-spin" />
+          <div className="text-center space-y-1">
+            <p className="text-sm font-medium text-text-primary">Creating environment...</p>
+            <p className="text-xs text-text-muted leading-relaxed">
+              Seeding {template.stats.assets} assets and {template.stats.vulnerabilities} vulnerabilities,<br />
+              wiring {template.stats.relationships} relationship edges.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Default state ──────────────────────────────────────────────────────────
+  return (
+    <div className="rounded-[16px] border border-border bg-surface p-5 flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${cfg.iconBg}`}>
+          <Icon className={`w-4 h-4 ${cfg.iconColor}`} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-text-primary">{template.name}</h3>
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${cfg.domainBg} ${cfg.domainText}`}>
+              {cfg.domain}
+            </span>
+          </div>
+          <p className="text-xs text-text-muted mt-1 leading-relaxed">{template.description}</p>
+        </div>
+      </div>
+
+      {/* What gets created */}
+      <div className="flex gap-2">
+        <StatChip value={template.stats.assets} label="assets" />
+        <StatChip value={template.stats.vulnerabilities} label="vulnerabilities" />
+        <StatChip value={template.stats.relationships} label="edges" />
+      </div>
+
+      {/* Tags */}
+      <div className="flex flex-wrap gap-1">
+        {template.tags.map((tag) => (
+          <TemplateTag key={tag} tag={tag} />
+        ))}
+      </div>
+
+      {/* Expandable: what you'll explore */}
+      <div>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-1.5 text-[11px] text-text-muted hover:text-text-primary transition-colors font-medium"
+        >
+          <FiChevronRight className={`w-3 h-3 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`} />
+          What you'll explore
+        </button>
+        {expanded && (
+          <p className="mt-2.5 text-xs text-text-muted leading-relaxed pl-4 border-l-2 border-border">
+            {template.longDescription}
+          </p>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between pt-3 border-t border-border mt-auto gap-3">
+        <p className="text-[10px] text-text-muted leading-tight">
+          Saved to your account<br />
+          <span className="text-text-muted/60">Deletable anytime from this list</span>
+        </p>
+        <button
+          onClick={onSeed}
+          disabled={anySeeding}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-1 text-white text-xs font-semibold hover:opacity-90 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+        >
+          <FiPlus className="w-3 h-3" />
+          Seed
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DemoTemplatesSection({ onSeeded }: { onSeeded: () => void }) {
+  const router = useRouter();
   const [templates, setTemplates] = useState<SeedTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [seedingId, setSeedingId] = useState<string | null>(null);
-  const [seededId, setSeededId] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, SeedResultEntry>>({});
 
   useEffect(() => {
     fetchSeedTemplates().then((res) => {
@@ -220,12 +435,17 @@ function DemoTemplatesSection({ onSeeded }: { onSeeded: () => void }) {
 
   const handleSeed = async (templateId: string) => {
     setSeedingId(templateId);
-    setSeededId(null);
     try {
       const res = await seedTemplate(templateId);
       if (res.data) {
-        setSeededId(templateId);
-        setTimeout(() => setSeededId(null), 3000);
+        setResults((prev) => ({
+          ...prev,
+          [templateId]: {
+            environmentId: res.data!.environmentId,
+            environmentName: res.data!.environmentName,
+            summary: res.data!.summary,
+          },
+        }));
         onSeeded();
       }
     } finally {
@@ -233,85 +453,63 @@ function DemoTemplatesSection({ onSeeded }: { onSeeded: () => void }) {
     }
   };
 
+  const handleNavigate = (envId: string, path: string) => {
+    router.push(`/environments/${envId}/${path}`);
+  };
+
+  const handleSeedAgain = (templateId: string) => {
+    setResults((prev) => {
+      const next = { ...prev };
+      delete next[templateId];
+      return next;
+    });
+  };
+
   if (isLoading) return null;
   if (templates.length === 0) return null;
 
   return (
-    <div className="mt-8">
-      <div className="flex items-center gap-2 mb-3">
-        <FiZap className="w-4 h-4 text-brand-1" />
-        <h2 className="text-sm font-semibold text-text-primary">Demo Environments</h2>
-        <span className="text-xs text-text-muted">— pre-seeded templates for quick testing and showcase</span>
+    <div className="mt-10">
+      {/* Section header */}
+      <div className="mb-4">
+        <div className="flex items-center gap-2 mb-1.5">
+          <FiZap className="w-4 h-4 text-brand-1" />
+          <h2 className="text-sm font-semibold text-text-primary">Demo Environments</h2>
+        </div>
+        <p className="text-xs text-text-muted leading-relaxed">
+          Pre-built templates loaded with realistic assets, CVSS-scored vulnerabilities, and typed relationship edges.
+          Ready to explore attack paths, blast radius, and entry point detection — no manual setup needed.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {templates.map((template) => {
-          const isExpanded = expanded === template.id;
-          const isSeeding = seedingId === template.id;
-          const isSeeded = seededId === template.id;
+      {/* Info callout */}
+      <div className="flex gap-3 p-4 rounded-[16px] bg-brand-1/5 border border-brand-1/15 mb-5">
+        <FiInfo className="w-4 h-4 text-brand-1 shrink-0 mt-0.5" />
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-text-primary">What happens when you seed?</p>
+          <p className="text-xs text-text-muted leading-relaxed">
+            A new environment is created in your account with pre-configured assets, real CVSS vectors and EPSS scores on each vulnerability, and typed relationship edges (network connections, auth dependencies, code execution paths, etc.). The graph traversal engine runs immediately — open the Asset Map to see detected entry points, reachable blast radius, and scored attack paths.
+          </p>
+          <p className="text-xs text-text-muted leading-relaxed">
+            Each seed is isolated and independent. You can seed the same template multiple times — CVE IDs are randomized to avoid conflicts. Delete any environment from this list when you&apos;re done.
+          </p>
+        </div>
+      </div>
 
-          return (
-            <div
-              key={template.id}
-              className="rounded-[16px] border border-border bg-surface p-4 flex flex-col gap-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-text-primary truncate">{template.name}</h3>
-                  <p className="text-xs text-text-muted mt-0.5 line-clamp-2">{template.description}</p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-1">
-                {template.tags.map((tag) => (
-                  <TemplateTag key={tag} tag={tag} />
-                ))}
-              </div>
-
-              {isExpanded && (
-                <p className="text-xs text-text-muted leading-relaxed border-t border-border pt-3">
-                  {template.longDescription}
-                </p>
-              )}
-
-              <div className="flex items-center justify-between gap-2 mt-auto pt-1 border-t border-border">
-                <button
-                  onClick={() => setExpanded(isExpanded ? null : template.id)}
-                  className="text-[11px] text-text-muted hover:text-text-primary transition-colors"
-                >
-                  {isExpanded ? "Less" : "Details"}
-                </button>
-
-                <button
-                  onClick={() => handleSeed(template.id)}
-                  disabled={isSeeding || !!seedingId}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
-                    isSeeded
-                      ? "bg-green-500/10 text-green-400"
-                      : "bg-brand-1 text-white hover:opacity-90"
-                  }`}
-                >
-                  {isSeeding ? (
-                    <>
-                      <FiLoader className="w-3 h-3 animate-spin" />
-                      Seeding...
-                    </>
-                  ) : isSeeded ? (
-                    <>
-                      <FiCheckCircle className="w-3 h-3" />
-                      Created
-                    </>
-                  ) : (
-                    <>
-                      <FiPlus className="w-3 h-3" />
-                      Seed
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          );
-        })}
+      {/* Template cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {templates.map((template) => (
+          <TemplateCard
+            key={template.id}
+            template={template}
+            onSeed={() => handleSeed(template.id)}
+            isSeeding={seedingId === template.id}
+            anySeeding={seedingId !== null}
+            result={results[template.id] ?? null}
+            onNavigate={handleNavigate}
+            onSeedAgain={() => handleSeedAgain(template.id)}
+          />
+        ))}
       </div>
     </div>
   );

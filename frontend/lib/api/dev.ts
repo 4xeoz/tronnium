@@ -142,6 +142,11 @@ export type SeedTemplate = {
   description: string;
   longDescription: string;
   tags: string[];
+  stats: {
+    assets: number;
+    vulnerabilities: number;
+    relationships: number;
+  };
 };
 
 export type SeedResult = {
