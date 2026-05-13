@@ -9,6 +9,7 @@ import {
 } from "../../lib/graph-traversal.service";
 import {
   loadAssetVulnProfiles,
+  loadAdjacencyList,
   findEntryPoints,
 } from "../../lib/graph-data.service";
 
