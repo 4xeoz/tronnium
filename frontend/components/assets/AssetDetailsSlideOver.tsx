@@ -329,6 +329,7 @@ export default function AssetDetailsSlideOver({
                     <InfoRow label="Name" value={currentAsset.name} />
                     <InfoRow label="Description" value={currentAsset.description} />
                     <InfoRow label="Domain" value={currentAsset.domain} />
+                    <InfoRow label="Externally Facing" value={currentAsset.isExternallyFacing ? "Yes" : "No"} />
                     <div className="flex gap-8">
                       <InfoRow 
                         label="Created" 

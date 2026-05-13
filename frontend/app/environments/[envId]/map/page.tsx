@@ -1,6 +1,7 @@
 'use client'
 
 import MapSidebar from '@/components/map/MapSidebar'
+import BlastRadiusSidebar from '@/components/map/BlastRadiusSidebar'
 import AssetNode from '@/components/map/AssetNode'
 import DependencyEdge from '@/components/map/DependencyEdge'
 import RelationshipSidebar from '@/components/map/RelationshipSidebar'
@@ -15,6 +16,7 @@ import {
   type Asset,
   type RelationType,
   type CriticalityLevel,
+  type SecurityCriticalityLevel,
   type ScanSeverity,
 } from '@/lib/api'
 import { fetchVulnerabilityWorkflows, type WorkflowItem, type VulnStatus } from '@/lib/api/vulnerabilityWorkflow'
@@ -25,17 +27,23 @@ import ReactFlow, {
   MiniMap,
   Controls,
   Background,
+  Panel,
   useNodesState,
   useEdgesState,
   BackgroundVariant,
   Connection,
   Edge,
   Node,
+  MarkerType,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { updateAssetPosition } from '@/lib/api/assets'
 import { Button } from '@/components/ui/Button'
 import { INACTIVE_STATUSES } from '@/lib/securityConstants'
+import { useEntryPoints } from '@/lib/hooks/useEntryPoints'
+import { FiShield, FiX } from 'react-icons/fi'
+import { BlastRadiusConfig } from '@/lib/api/graph'
+import { useBlastRadius } from '@/lib/hooks/useBlastRadius'
 
 export type VulnSummary = {
   critical: number;
@@ -62,6 +70,34 @@ const Page = () => {
   const [workflowsForAsset, setWorkflowsForAsset] = useState<Map<string, WorkflowItem>>(new Map())
   const [error, setError] = useState<string | null>(null)
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null)
+
+  const { data: entryPoints } = useEntryPoints(envId)
+
+  const entryPointIds = useMemo(
+  () => new Set((entryPoints ?? []).map(ep => ep.id)),
+  [entryPoints])
+
+  const [analysisAssetId, setAnalysisAssetId] = useState<string | null>(null)
+  const [analysisConfig, setAnalysisConfig] = useState<Partial<BlastRadiusConfig>>({})
+
+  const { data: blastRadius, isLoading: isAnalyzing } = useBlastRadius(envId,analysisAssetId, analysisConfig )
+
+  const riskOverlay = useMemo(() => {
+    if (!blastRadius) return null
+    const map = new Map<string, { compromiseScore: number; knowledgeScore: number; hops: number }>()
+    for (const node of blastRadius.reached) {
+      map.set(node.assetId, {
+        compromiseScore: node.compromiseScore,
+        knowledgeScore: node.knowledgeScore,
+        hops: node.hops,
+      })
+    }
+    return {
+      sourceId: blastRadius.sourceAssetId,
+      reachableMap: map,
+      gatedIds: new Set(blastRadius.gatedEdges.map(g => g.toAssetId)),
+    }
+  }, [blastRadius])
 
   const { data: ResponseOfAssets, isLoading: assetsLoading } = useQuery({
     queryKey: ['assets', envId],
@@ -92,8 +128,8 @@ const Page = () => {
   })
 
   const createMutation = useMutation({
-    mutationFn: (data: { fromAssetId: string; toAssetId: string; type: RelationType; criticality: CriticalityLevel }) =>
-      createRelationship(envId, data.fromAssetId, data.toAssetId, data.type, data.criticality),
+    mutationFn: (data: { fromAssetId: string; toAssetId: string; type: RelationType; operationalCriticality: CriticalityLevel; securityCriticality: SecurityCriticalityLevel }) =>
+      createRelationship(envId, data.fromAssetId, data.toAssetId, data.type, data.operationalCriticality, data.securityCriticality),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['relationships', envId] })
       setError(null)
@@ -106,8 +142,8 @@ const Page = () => {
   })
 
   const updateMutation = useMutation({
-    mutationFn: (data: { relationshipId: string; type?: RelationType; criticality?: CriticalityLevel }) => 
-      updateRelationship(envId, data.relationshipId, data.type, data.criticality),
+    mutationFn: (data: { relationshipId: string; type?: RelationType; operationalCriticality?: CriticalityLevel; securityCriticality?: SecurityCriticalityLevel }) => 
+      updateRelationship(envId, data.relationshipId, data.type, data.operationalCriticality, data.securityCriticality),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['relationships', envId] })
       setError(null)
@@ -189,9 +225,18 @@ const Page = () => {
         x: asset.x ?? 60 + (idx % cols) * xGap,
         y: asset.y ?? 60 + Math.floor(idx / cols) * yGap,
       },
-      data: { asset, label: asset.name, vulnSummary: assetVulnMap.get(asset.id) ?? EMPTY_VULN_SUMMARY },
+      data: {
+        asset,
+        label: asset.name,
+        vulnSummary: assetVulnMap.get(asset.id) ?? EMPTY_VULN_SUMMARY,
+        isEntryPoint: entryPointIds.has(asset.id),
+        riskOverlay: riskOverlay?.reachableMap.get(asset.id),
+        isGated: riskOverlay?.gatedIds.has(asset.id),
+        isAnalysisSource: analysisAssetId === asset.id,
+        isAnalysisModeActive: !!analysisAssetId,
+      },
     })) as Node[]
-  }, [ResponseOfAssets, assetVulnMap])
+  }, [ResponseOfAssets, assetVulnMap, entryPointIds, riskOverlay])
 
   const relationshipEdges = useMemo(() => {
     if (!ResponseOfrelationships) return [] as Edge[]
@@ -211,6 +256,17 @@ const Page = () => {
   useEffect(() => { if (assetNodes.length > 0) setNodes(assetNodes) }, [assetNodes, setNodes])
   useEffect(() => { setEdges(relationshipEdges) }, [relationshipEdges, setEdges])
 
+  // Sync ReactFlow node selection with selectedAsset state
+  // so clicking an asset in BlastRadiusSidebar highlights it on the map
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) => ({
+        ...n,
+        selected: n.id === selectedAsset?.id,
+      }))
+    )
+  }, [selectedAsset, setNodes])
+
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return
     if (connection.source === connection.target) {
@@ -229,13 +285,14 @@ const Page = () => {
     setPendingConnection(connection)
   }, [relationshipEdges])
 
-  const handleCreateRelationship = (type: RelationType, criticality: CriticalityLevel) => {
+  const handleCreateRelationship = (type: RelationType, operationalCriticality: CriticalityLevel, securityCriticality: SecurityCriticalityLevel) => {
     if (!pendingConnection?.source || !pendingConnection?.target) return
     createMutation.mutate({
       fromAssetId: pendingConnection.source,
       toAssetId: pendingConnection.target,
       type,
-      criticality,
+      operationalCriticality,
+      securityCriticality,
     })
     setPendingConnection(null)
   }
@@ -295,7 +352,7 @@ const Page = () => {
           fitView
           fitViewOptions={{ padding: 0.3 }}
           proOptions={{ hideAttribution: true }}
-          defaultEdgeOptions={{ type: 'dependency' }}
+          defaultEdgeOptions={{ type: 'dependency', markerEnd: { type: MarkerType.ArrowClosed }, }}
         >
           <Controls
             className="!bg-surface !border-border !rounded-[10px] !shadow-[var(--shadow-ring)] [&>button]:!bg-surface [&>button]:!border-border [&>button]:!text-text-secondary [&>button:hover]:!bg-surface-secondary"
@@ -305,6 +362,45 @@ const Page = () => {
             nodeColor="var(--brand-color-1)"
             maskColor="var(--background-secondary)"
           />
+          <Panel position="top-left" className="!m-2">
+            <div className="bg-surface/95 backdrop-blur-sm border border-border rounded-[10px] px-3 py-2 shadow-[var(--shadow-ring)] ml-3 mb-3">
+              <div className="flex items-center gap-2">
+                <FiShield className="w-4 h-4 text-info-text" />
+                <div>
+                  <p className="text-[11px] font-semibold text-text-primary leading-tight">
+                    Attack entry point
+                  </p>
+                  <p className="text-[10px] text-text-muted leading-tight">
+                    Externally reachable with exploitable vulnerability
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Panel>
+
+          {analysisAssetId && (
+            <Panel position="top-center" className="!mt-15 ">
+              <div className="bg-surface/95 backdrop-blur-sm border border-brand-1 rounded-[10px] px-4 py-2 shadow-[var(--shadow-ring)] flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-brand-1 animate-pulse" />
+                  <span className="text-xs font-semibold text-text-primary">
+                    Blast radius analysis active
+                  </span>
+                  <span className="text-[10px] text-text-muted">
+                    Source: {assets.find(a => a.id === analysisAssetId)?.name || analysisAssetId}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setAnalysisAssetId(null)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-background-secondary hover:bg-surface-secondary border border-border text-[11px] font-medium text-text-secondary hover:text-text-primary transition-colors active:scale-95"
+                >
+                  <FiX className="w-3 h-3" />
+                  Clear
+                </button>
+              </div>
+            </Panel>
+          )}
+
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
         </ReactFlow>
 
@@ -319,9 +415,9 @@ const Page = () => {
             <div className="bg-surface border border-border rounded-[24px] shadow-[var(--shadow-card)] p-6 max-w-sm w-full mx-4 animate-[slideUp_200ms_ease]">
               <h2 className="text-[22px] font-bold text-text-primary tracking-[-0.3px] mb-4">Create Relationship</h2>
               <div className="mb-4 p-3 bg-background-secondary rounded-[10px]">
-                <div className="text-[11px] text-text-muted uppercase tracking-wide mb-1">FROM → TO</div>
+                <div className="text-[11px] text-text-muted uppercase tracking-wide mb-1">FROM - TO</div>
                 <div className="text-sm font-semibold text-text-primary">
-                  {assets?.find((a) => a.id === pendingConnection.source)?.name || 'Asset'} →{' '}
+                  {assets?.find((a) => a.id === pendingConnection.source)?.name || 'Asset'} -{' '}
                   {assets?.find((a) => a.id === pendingConnection.target)?.name || 'Asset'}
                 </div>
               </div>
@@ -329,20 +425,31 @@ const Page = () => {
                 <div>
                   <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Type</label>
                   <div className="space-y-1">
-                    {(['DEPENDS_ON', 'CONTROLS', 'PROVIDES_SERVICE', 'SHARES_DATA_WITH'] as const).map((t) => (
+                    {(['NETWORK_CONNECTS_TO', 'MANAGED_BY', 'AUTHENTICATES_VIA', 'EXECUTES_CODE_FROM', 'RECEIVES_DATA_FROM', 'SHARES_CREDENTIALS_WITH'] as const).map((t) => (
                       <label key={t} className="flex items-center gap-2 p-2 hover:bg-background-secondary rounded-[10px] cursor-pointer transition-colors">
-                        <input type="radio" name="type" value={t} defaultChecked={t === 'DEPENDS_ON'} className="accent-brand-1" />
+                        <input type="radio" name="type" value={t} defaultChecked={t === 'NETWORK_CONNECTS_TO'} className="accent-brand-1" />
                         <span className="text-sm text-text-primary">{t.replace(/_/g, ' ')}</span>
                       </label>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Criticality</label>
+                  <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Operational Criticality</label>
                   <div className="space-y-1">
                     {(['low', 'medium', 'high'] as const).map((c) => (
                       <label key={c} className="flex items-center gap-2 p-2 hover:bg-background-secondary rounded-[10px] cursor-pointer transition-colors">
-                        <input type="radio" name="criticality" value={c} defaultChecked={c === 'medium'} className="accent-brand-1" />
+                        <input type="radio" name="operationalCriticality" value={c} defaultChecked={c === 'medium'} className="accent-brand-1" />
+                        <span className="text-sm text-text-primary capitalize">{c}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Security Criticality</label>
+                  <div className="space-y-1">
+                    {(['low', 'medium', 'high', 'critical'] as const).map((c) => (
+                      <label key={c} className="flex items-center gap-2 p-2 hover:bg-background-secondary rounded-[10px] cursor-pointer transition-colors">
+                        <input type="radio" name="securityCriticality" value={c} defaultChecked={c === 'low'} className="accent-brand-1" />
                         <span className="text-sm text-text-primary capitalize">{c}</span>
                       </label>
                     ))}
@@ -354,8 +461,9 @@ const Page = () => {
                 <Button
                   onClick={() => {
                     const type = (document.querySelector('input[name="type"]:checked') as HTMLInputElement)?.value as RelationType
-                    const criticality = (document.querySelector('input[name="criticality"]:checked') as HTMLInputElement)?.value as CriticalityLevel
-                    handleCreateRelationship(type, criticality)
+                    const operationalCriticality = (document.querySelector('input[name="operationalCriticality"]:checked') as HTMLInputElement)?.value as CriticalityLevel
+                    const securityCriticality = (document.querySelector('input[name="securityCriticality"]:checked') as HTMLInputElement)?.value as SecurityCriticalityLevel
+                    handleCreateRelationship(type, operationalCriticality, securityCriticality)
                   }}
                   disabled={createMutation.isPending}
                   isLoading={createMutation.isPending}
@@ -369,6 +477,21 @@ const Page = () => {
         )}
       </div>
 
+      {analysisAssetId && blastRadius && (
+        <BlastRadiusSidebar
+          result={blastRadius}
+          assets={assets || []}
+          onClose={() => setAnalysisAssetId(null)}
+          onConfigChange={setAnalysisConfig}
+          onSelectAsset={(assetId) => {
+            const asset = assets.find((a) => a.id === assetId) ?? null
+            setSelectedAsset(asset)
+            setSelectedEdge(null)
+          }}
+          isLoading={isAnalyzing}
+        />
+      )}
+
       {selectedAsset && !selectedEdge && (
         <MapSidebar
           asset={selectedAsset}
@@ -376,6 +499,9 @@ const Page = () => {
           onClose={() => setSelectedAsset(null)}
           onVulnClick={setSelectedVuln}
           onWorkflowsLoaded={handleWorkflowsLoaded}
+          analysisAssetId={analysisAssetId}
+          setAnalysisAssetId={setAnalysisAssetId}
+          isAnalyzing={isAnalyzing}
         />
       )}
 
@@ -384,11 +510,12 @@ const Page = () => {
           edge={selectedEdge}
           assets={assets || []}
           onClose={() => setSelectedEdge(null)}
-          onUpdate={(type, criticality) => {
+          onUpdate={(type, operationalCriticality, securityCriticality) => {
             updateMutation.mutate({
               relationshipId: selectedEdge.id,
               type: type as RelationType,
-              criticality: criticality as CriticalityLevel,
+              operationalCriticality: operationalCriticality as CriticalityLevel,
+              securityCriticality: securityCriticality as SecurityCriticalityLevel,
             })
           }}
           onDelete={() => deleteMutation.mutate(selectedEdge.id)}

@@ -5,8 +5,17 @@
 
 const DEFAULT_BACKEND_URL = "http://localhost:4000";
 
+let isRedirectingToLogin = false;
+
 export function getBackendUrl(): string {
   return process.env.NEXT_PUBLIC_BACKEND_URL ?? DEFAULT_BACKEND_URL;
+}
+
+function redirectToLogin() {
+  if (typeof window === "undefined") return;
+  if (isRedirectingToLogin) return;
+  isRedirectingToLogin = true;
+  window.location.href = "/";
 }
 
 /**
@@ -47,6 +56,11 @@ export async function apiFetch<T>(
   });
 
   if (!response.ok) {
+    // Global auth guard: send user to login on 401 (except for the auth check itself)
+    if (response.status === 401 && !endpoint.includes("/auth/me")) {
+      redirectToLogin();
+    }
+
     let errorMessage = `Request failed: ${response.status}`;
     try {
       const errorJson = await response.json();

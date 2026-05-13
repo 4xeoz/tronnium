@@ -40,7 +40,7 @@ export async function createAssetHandler(req: Request, res: Response) {
     try {
         const { environmentId } = req.params;
         const user = req.user as PublicUser;
-        const { name, description, cpes, domain, type, status, location, ipAddress, manufacturer, model, serialNumber } = req.body;
+        const { name, description, cpes, domain, type, status, location, ipAddress, manufacturer, model, serialNumber, isExternallyFacing } = req.body;
 
         if (!name || typeof name !== "string" || name.trim().length === 0) {
             return res.status(400).json(
@@ -89,6 +89,7 @@ export async function createAssetHandler(req: Request, res: Response) {
                 manufacturer: manufacturer?.trim() || null,
                 model: model?.trim() || null,
                 serialNumber: serialNumber?.trim() || null,
+                isExternallyFacing: typeof isExternallyFacing === "boolean" ? isExternallyFacing : false,
                 cpes: {
                     create: selectedCpes.map((cpe) => ({
                         cpeName: cpe.cpeName,
@@ -162,7 +163,7 @@ export async function updateAssetHandler(req: Request, res: Response) {
     try {
         const { environmentId, assetId } = req.params;
         const user = req.user as PublicUser;
-        const { name, description, domain, type, status, location, ipAddress, x, y } = req.body;
+        const { name, description, domain, type, status, location, ipAddress, x, y , isExternallyFacing} = req.body;
 
         console.log(`[Update Asset] User ${user.id} updating asset ${assetId} in environment ${environmentId} with data:`, req.body);
 
@@ -188,6 +189,8 @@ export async function updateAssetHandler(req: Request, res: Response) {
         if (ipAddress && typeof ipAddress === "string") updateData.ipAddress = ipAddress.trim();
         if (typeof x === "number") updateData.x = x;
         if (typeof y === "number") updateData.y = y;
+        if (typeof isExternallyFacing === "boolean") updateData.isExternallyFacing = isExternallyFacing;
+
 
         const updated = await prisma.asset.update({
             where: { id: assetId },

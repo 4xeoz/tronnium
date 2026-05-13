@@ -5,6 +5,7 @@ import {
   clearMockVulnerabilitiesHandler,
   getMockVulnerabilitiesHandler,
   getMockVulnerabilityStatsHandler,
+  createTestVulnerabilityHandler,
 } from "./dev.controller";
 
 const devRouter = Router();
@@ -36,5 +37,11 @@ devRouter.delete("/mock-vulnerabilities/:environmentId", clearMockVulnerabilitie
  * Get statistics about mock vulnerabilities
  */
 devRouter.get("/mock-vulnerabilities/:environmentId/stats", getMockVulnerabilityStatsHandler);
+
+/**
+ * POST /dev/create-test-vulnerability
+ * Manually create a single test vulnerability for dev/testing
+ */
+devRouter.post("/create-test-vulnerability", createTestVulnerabilityHandler);
 
 export default devRouter;

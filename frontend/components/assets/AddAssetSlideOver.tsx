@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { FiX, FiSearch, FiCheck, FiAlertCircle, FiLoader, FiZap } from "react-icons/fi";
+import {
+  FiX,
+  FiSearch,
+  FiCheck,
+  FiAlertCircle,
+  FiLoader,
+  FiZap,
+  FiGlobe,
+} from "react-icons/fi";
 import { Button } from "@/components/ui/Button";
 import { Input, TextArea, Select } from "@/components/ui/Input";
 import { createAsset, type CpeCandidate } from "@/lib/api";
@@ -21,9 +29,16 @@ interface Props {
   environmentId: string;
 }
 
-export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environmentId }: Props) {
+export default function AddAssetSlideOver({
+  isOpen,
+  onClose,
+  onSuccess,
+  environmentId,
+}: Props) {
   const [searchMode, setSearchMode] = useState<SearchMode>("name");
-  const [searchType, setSearchType] = useState<"standard" | "semantic">("standard");
+  const [searchType, setSearchType] = useState<"standard" | "semantic">(
+    "standard",
+  );
   const [topN, setTopN] = useState(10);
   const [step, setStep] = useState<Step>("input");
   const [selectedCpes, setSelectedCpes] = useState<CpeCandidate[]>([]);
@@ -49,23 +64,26 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
   }, [isOpen]);
 
   // Map semantic candidates to CpeCandidate shape so CpeCandidateSelector can render them
-  const semanticAsCandidates = useMemo<CpeCandidate[]>(() =>
-    cpeSearch.semanticCandidates.map((r) => ({
-      cpeName: r.cpeName,
-      cpeNameId: "",
-      title: r.title,
-      // similarity is 0–1, convert to 0–100 to match the score field
-      score: Math.round(r.similarity * 100),
-      vendor: "",
-      product: "",
-      version: "",
-      breakdown: { vendor: 0, product: 0, version: 0, tokenOverlap: 0 },
-    })),
+  const semanticAsCandidates = useMemo<CpeCandidate[]>(
+    () =>
+      cpeSearch.semanticCandidates.map((r) => ({
+        cpeName: r.cpeName,
+        cpeNameId: "",
+        title: r.title,
+        // similarity is 0–1, convert to 0–100 to match the score field
+        score: Math.round(r.similarity * 100),
+        vendor: "",
+        product: "",
+        version: "",
+        breakdown: { vendor: 0, product: 0, version: 0, tokenOverlap: 0 },
+      })),
     [cpeSearch.semanticCandidates],
   );
 
   const isSemanticResults = searchType === "semantic";
-  const displayCandidates = isSemanticResults ? semanticAsCandidates : cpeSearch.candidates;
+  const displayCandidates = isSemanticResults
+    ? semanticAsCandidates
+    : cpeSearch.candidates;
 
   function handleClose() {
     cpeSearch.reset();
@@ -100,18 +118,22 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
     setSelectedCpes((prev) =>
       prev.some((c) => c.cpeName === cpe.cpeName)
         ? prev.filter((c) => c.cpeName !== cpe.cpeName)
-        : [...prev, cpe]
+        : [...prev, cpe],
     );
   }
 
   async function handleCreateAsset() {
-    const cpes = searchMode === "cpe" && cpeValidation.validatedCpe
-      ? [cpeValidation.validatedCpe]
-      : selectedCpes;
+    const cpes =
+      searchMode === "cpe" && cpeValidation.validatedCpe
+        ? [cpeValidation.validatedCpe]
+        : selectedCpes;
 
     const input = form.buildCreateInput(cpes);
     const name = input.name || cpeValidation.cpeInput.trim();
-    if (!name) { setError("Asset name is required"); return; }
+    if (!name) {
+      setError("Asset name is required");
+      return;
+    }
 
     setError(null);
     setIsCreating(true);
@@ -145,11 +167,18 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
         {/* Header */}
         <div className="px-6 py-5 border-b border-border flex items-center justify-between">
           <div>
-            <h2 className="text-[22px] font-bold text-text-primary tracking-[-0.3px]">Add Asset</h2>
+            <h2 className="text-[22px] font-bold text-text-primary tracking-[-0.3px]">
+              Add Asset
+            </h2>
             <p className="text-[13px] text-text-muted mt-0.5">
-              {step === "input" && "Search for an asset or enter a CPE directly"}
-              {step === "select" && !isSemanticResults && "Select CPEs to associate with this asset"}
-              {step === "select" && isSemanticResults && "Showing semantic similarity matches"}
+              {step === "input" &&
+                "Search for an asset or enter a CPE directly"}
+              {step === "select" &&
+                !isSemanticResults &&
+                "Select CPEs to associate with this asset"}
+              {step === "select" &&
+                isSemanticResults &&
+                "Showing semantic similarity matches"}
             </p>
           </div>
           <button
@@ -162,9 +191,10 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
 
         {/* Body — two-panel layout when results are available */}
         <div className="flex-1 overflow-hidden flex">
-
           {/* Left panel: input form */}
-          <div className={`overflow-y-auto p-6 flex flex-col gap-5 ${step === "select" ? "w-[360px] shrink-0 border-r border-border" : "flex-1"}`}>
+          <div
+            className={`overflow-y-auto p-6 flex flex-col gap-5 ${step === "select" ? "w-[360px] shrink-0 border-r border-border" : "flex-1"}`}
+          >
             {displayError && (
               <div className="p-3 bg-error-bg border border-error-border rounded-[10px] text-error-text text-sm flex items-center gap-2">
                 <FiAlertCircle className="w-4 h-4 shrink-0" />
@@ -199,23 +229,35 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
                       <Input
                         type="text"
                         value={form.fields.assetName}
-                        onChange={(e) => form.setField("assetName", e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && !cpeSearch.isSearching && runSearch()}
+                        onChange={(e) =>
+                          form.setField("assetName", e.target.value)
+                        }
+                        onKeyDown={(e) =>
+                          e.key === "Enter" &&
+                          !cpeSearch.isSearching &&
+                          runSearch()
+                        }
                         placeholder="e.g., OpenSSL 1.1.1, Apache HTTP Server 2.4"
                         disabled={cpeSearch.isSearching}
                         className="pr-11"
                       />
                       <button
                         onClick={runSearch}
-                        disabled={!form.fields.assetName.trim() || cpeSearch.isSearching}
+                        disabled={
+                          !form.fields.assetName.trim() || cpeSearch.isSearching
+                        }
                         className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-secondary disabled:opacity-50 transition-all active:scale-95"
                       >
-                        {cpeSearch.isSearching
-                          ? <FiLoader className="w-4 h-4 animate-spin" />
-                          : <FiSearch className="w-4 h-4" />}
+                        {cpeSearch.isSearching ? (
+                          <FiLoader className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <FiSearch className="w-4 h-4" />
+                        )}
                       </button>
                     </div>
-                    <p className="mt-1.5 text-[11px] text-text-muted">Enter a software/hardware name to find matching CPEs</p>
+                    <p className="mt-1.5 text-[11px] text-text-muted">
+                      Enter a software/hardware name to find matching CPEs
+                    </p>
                   </div>
 
                   {/* Search type toggle + result count */}
@@ -245,13 +287,21 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
                         min={1}
                         max={50}
                         value={topN}
-                        onChange={(e) => setTopN(Math.min(50, Math.max(1, Number(e.target.value))))}
+                        onChange={(e) =>
+                          setTopN(
+                            Math.min(50, Math.max(1, Number(e.target.value))),
+                          )
+                        }
                         className="w-16 text-center"
                       />
                     </div>
                   </div>
 
-                  {cpeSearch.isSearching && <CpeSearchProgress progressMessages={cpeSearch.progressMessages} />}
+                  {cpeSearch.isSearching && (
+                    <CpeSearchProgress
+                      progressMessages={cpeSearch.progressMessages}
+                    />
+                  )}
 
                   {!cpeSearch.isSearching && step === "input" && (
                     <>
@@ -261,15 +311,24 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
                         </label>
                         <TextArea
                           value={form.fields.description}
-                          onChange={(e) => form.setField("description", e.target.value)}
+                          onChange={(e) =>
+                            form.setField("description", e.target.value)
+                          }
                           placeholder="Additional details about this asset..."
                           rows={3}
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Type</label>
-                          <Select value={form.fields.type} onChange={(e) => form.setField("type", e.target.value)}>
+                          <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">
+                            Type
+                          </label>
+                          <Select
+                            value={form.fields.type}
+                            onChange={(e) =>
+                              form.setField("type", e.target.value)
+                            }
+                          >
                             <option value="unknown">Unknown</option>
                             <option value="server">Server</option>
                             <option value="database">Database</option>
@@ -279,8 +338,15 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
                           </Select>
                         </div>
                         <div>
-                          <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Status</label>
-                          <Select value={form.fields.status} onChange={(e) => form.setField("status", e.target.value)}>
+                          <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">
+                            Status
+                          </label>
+                          <Select
+                            value={form.fields.status}
+                            onChange={(e) =>
+                              form.setField("status", e.target.value)
+                            }
+                          >
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
                             <option value="maintenance">Maintenance</option>
@@ -289,23 +355,63 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Location</label>
+                          <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">
+                            Location
+                          </label>
                           <Input
                             type="text"
                             value={form.fields.location}
-                            onChange={(e) => form.setField("location", e.target.value)}
+                            onChange={(e) =>
+                              form.setField("location", e.target.value)
+                            }
                             placeholder="e.g., Data Center 1"
                           />
                         </div>
                         <div>
-                          <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">IP Address</label>
+                          <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">
+                            IP Address
+                          </label>
                           <Input
                             type="text"
                             value={form.fields.ipAddress}
-                            onChange={(e) => form.setField("ipAddress", e.target.value)}
+                            onChange={(e) =>
+                              form.setField("ipAddress", e.target.value)
+                            }
                             placeholder="e.g., 192.168.1.1"
                           />
                         </div>
+                      </div>
+
+                      {/* Externally Facing Toggle */}
+                      <div className="flex items-center justify-between p-3.5 bg-surface-secondary rounded-[10px] border border-border">
+                        <div className="flex items-center gap-2.5">
+                          <FiGlobe className="w-4 h-4 text-text-muted" />
+                          <span className="text-sm text-text-secondary">
+                            Externally facing (public internet)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            form.setField(
+                              "isExternallyFacing",
+                              !form.fields.isExternallyFacing,
+                            )
+                          }
+                          className={`relative w-11 h-6 rounded-full transition-colors duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-brand-1/30 ${
+                            form.fields.isExternallyFacing
+                              ? "bg-brand-1"
+                              : "bg-surface-tertiary border border-border"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-out ${
+                              form.fields.isExternallyFacing
+                                ? "translate-x-5"
+                                : "translate-x-0"
+                            }`}
+                          />
+                        </button>
                       </div>
                     </>
                   )}
@@ -313,39 +419,56 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
               ) : (
                 <>
                   <div>
-                    <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">CPE String</label>
+                    <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">
+                      CPE String
+                    </label>
                     <div className="relative">
                       <Input
                         type="text"
                         value={cpeValidation.cpeInput}
-                        onChange={(e) => cpeValidation.setCpeInput(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && cpeValidation.validate()}
+                        onChange={(e) =>
+                          cpeValidation.setCpeInput(e.target.value)
+                        }
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && cpeValidation.validate()
+                        }
                         placeholder="cpe:2.3:a:vendor:product:version:*:*:*:*:*:*:*"
                         className="pr-11 font-mono text-sm"
                       />
                       <button
                         onClick={cpeValidation.validate}
-                        disabled={!cpeValidation.cpeInput.trim() || cpeValidation.isValidating}
+                        disabled={
+                          !cpeValidation.cpeInput.trim() ||
+                          cpeValidation.isValidating
+                        }
                         className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center bg-brand-2 text-white hover:opacity-90 disabled:opacity-50 transition-all active:scale-95"
                       >
-                        {cpeValidation.isValidating
-                          ? <FiLoader className="w-4 h-4 animate-spin" />
-                          : <FiSearch className="w-4 h-4" />}
+                        {cpeValidation.isValidating ? (
+                          <FiLoader className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <FiSearch className="w-4 h-4" />
+                        )}
                       </button>
                     </div>
-                    <p className="mt-1.5 text-[11px] text-text-muted">Enter a valid CPE 2.3 string to validate</p>
+                    <p className="mt-1.5 text-[11px] text-text-muted">
+                      Enter a valid CPE 2.3 string to validate
+                    </p>
                   </div>
 
                   {cpeValidation.validationResult && (
-                    <div className={`p-3 rounded-[10px] border text-sm ${
-                      cpeValidation.validationResult.isValid
-                        ? "bg-success-bg border-success-border text-success-text"
-                        : "bg-error-bg border-error-border text-error-text"
-                    }`}>
+                    <div
+                      className={`p-3 rounded-[10px] border text-sm ${
+                        cpeValidation.validationResult.isValid
+                          ? "bg-success-bg border-success-border text-success-text"
+                          : "bg-error-bg border-error-border text-error-text"
+                      }`}
+                    >
                       <div className="flex items-center gap-2">
-                        {cpeValidation.validationResult.isValid
-                          ? <FiCheck className="w-4 h-4" />
-                          : <FiAlertCircle className="w-4 h-4" />}
+                        {cpeValidation.validationResult.isValid ? (
+                          <FiCheck className="w-4 h-4" />
+                        ) : (
+                          <FiAlertCircle className="w-4 h-4" />
+                        )}
                         {cpeValidation.validationResult.message}
                       </div>
                     </div>
@@ -353,11 +476,15 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
 
                   {cpeValidation.validationResult?.isValid && (
                     <div>
-                      <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Asset Name</label>
+                      <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">
+                        Asset Name
+                      </label>
                       <Input
                         type="text"
                         value={form.fields.assetName}
-                        onChange={(e) => form.setField("assetName", e.target.value)}
+                        onChange={(e) =>
+                          form.setField("assetName", e.target.value)
+                        }
                         placeholder="Give this asset a friendly name"
                       />
                     </div>
@@ -373,7 +500,11 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
               {isSemanticResults && (
                 <div className="flex items-start gap-2 p-3 bg-brand-1/10 border border-brand-1/20 rounded-[10px] text-sm text-text-secondary">
                   <FiZap className="w-4 h-4 mt-0.5 shrink-0 text-brand-1" />
-                  <span>No exact CPE matches found. Showing AI semantic similarity results instead — ranked by how closely they match your search.</span>
+                  <span>
+                    No exact CPE matches found. Showing AI semantic similarity
+                    results instead — ranked by how closely they match your
+                    search.
+                  </span>
                 </div>
               )}
               <CpeCandidateSelector
@@ -381,7 +512,11 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
                 selectedCpes={selectedCpes}
                 onToggle={toggleCpeSelection}
                 assetName={form.fields.assetName}
-                progressMessages={!isSemanticResults && cpeSearch.pipelineComplete ? cpeSearch.progressMessages : undefined}
+                progressMessages={
+                  !isSemanticResults && cpeSearch.pipelineComplete
+                    ? cpeSearch.progressMessages
+                    : undefined
+                }
               />
             </div>
           )}
@@ -392,13 +527,20 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
           <div className="flex gap-3">
             {step === "input" ? (
               <>
-                <Button type="button" variant="secondary" onClick={handleClose} className="flex-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleClose}
+                  className="flex-1"
+                >
                   Cancel
                 </Button>
                 {searchMode === "name" ? (
                   <Button
                     onClick={runSearch}
-                    disabled={!form.fields.assetName.trim() || cpeSearch.isSearching}
+                    disabled={
+                      !form.fields.assetName.trim() || cpeSearch.isSearching
+                    }
                     isLoading={cpeSearch.isSearching}
                     className="flex-1"
                   >
@@ -407,7 +549,9 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
                 ) : (
                   <Button
                     onClick={handleCreateAsset}
-                    disabled={!cpeValidation.validationResult?.isValid || isCreating}
+                    disabled={
+                      !cpeValidation.validationResult?.isValid || isCreating
+                    }
                     isLoading={isCreating}
                     className="flex-1"
                   >
@@ -417,7 +561,12 @@ export default function AddAssetSlideOver({ isOpen, onClose, onSuccess, environm
               </>
             ) : (
               <>
-                <Button type="button" variant="secondary" onClick={goBack} className="flex-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={goBack}
+                  className="flex-1"
+                >
                   Back
                 </Button>
                 <Button

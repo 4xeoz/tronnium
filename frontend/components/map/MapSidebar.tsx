@@ -2,7 +2,7 @@
 
 
 import { useEffect } from 'react'
-import { FiX, FiCpu, FiDatabase, FiServer, FiWifi, FiShield, FiHardDrive, FiShieldOff } from 'react-icons/fi'
+import { FiX, FiCpu, FiDatabase, FiServer, FiWifi, FiShield, FiHardDrive, FiShieldOff, FiActivity } from 'react-icons/fi'
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Asset } from '@/lib/api'
@@ -18,6 +18,9 @@ interface MapSidebarProps {
   onClose: () => void;
   onVulnClick: (vuln: SelectedVuln) => void;
   onWorkflowsLoaded?: (workflows: WorkflowItem[]) => void;
+  analysisAssetId?: string | null;
+  setAnalysisAssetId?: (id: string | null) => void;
+  isAnalyzing?: boolean;
 }
 
 const typeIcons: Record<string, React.ElementType> = {
@@ -39,7 +42,7 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
   )
 }
 
-export default function MapSidebar({ asset, environmentId, onClose, onVulnClick, onWorkflowsLoaded }: MapSidebarProps) {
+export default function MapSidebar({ asset, environmentId, onClose, onVulnClick, onWorkflowsLoaded, analysisAssetId, setAnalysisAssetId, isAnalyzing }: MapSidebarProps) {
   const Icon = typeIcons[asset?.type ?? 'unknown'] || typeIcons.unknown
   const cpeList = Array.isArray(asset?.cpes) ? asset!.cpes : []
   const isActive = asset?.status === 'active'
@@ -101,6 +104,7 @@ export default function MapSidebar({ asset, environmentId, onClose, onVulnClick,
           <DetailRow label="IP Address" value={asset.ipAddress} />
           <DetailRow label="Manufacturer" value={asset.manufacturer} />
           <DetailRow label="Description" value={asset.description} />
+          <DetailRow label="Externally Facing" value={asset.isExternallyFacing ? 'Yes — exposed to public internet' : 'No'} />
           <DetailRow label="Asset ID" value={asset.id} />
         </div>
 
@@ -179,6 +183,27 @@ export default function MapSidebar({ asset, environmentId, onClose, onVulnClick,
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {setAnalysisAssetId && (
+          <div className="pt-2">
+            <button
+              onClick={() => setAnalysisAssetId(analysisAssetId === asset.id ? null : asset.id)}
+              disabled={isAnalyzing}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-semibold transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed ${
+                analysisAssetId === asset.id
+                  ? 'bg-brand-1 text-white hover:bg-brand-1/90'
+                  : 'bg-background-secondary text-text-primary hover:bg-surface-secondary border border-border'
+              }`}
+            >
+              {isAnalyzing ? (
+                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <FiActivity className="w-4 h-4" />
+              )}
+              {isAnalyzing ? 'Analyzing...' : analysisAssetId === asset.id ? 'Clear Analysis' : 'Analyze Blast Radius'}
+            </button>
           </div>
         )}
       </div>

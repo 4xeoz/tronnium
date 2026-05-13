@@ -8,6 +8,7 @@ type FormFields = {
   status: string;
   location: string;
   ipAddress: string;
+  isExternallyFacing: boolean;
 };
 
 const DEFAULTS: FormFields = {
@@ -17,12 +18,13 @@ const DEFAULTS: FormFields = {
   status: "active",
   location: "",
   ipAddress: "",
+  isExternallyFacing: false,
 };
 
 export function useAddAssetForm() {
   const [fields, setFields] = useState<FormFields>(DEFAULTS);
 
-  function setField<K extends keyof FormFields>(key: K, value: string) {
+  function setField<K extends keyof FormFields>(key: K, value: FormFields[K]) {
     setFields((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -42,6 +44,7 @@ export function useAddAssetForm() {
       manufacturer: firstCpe?.vendor || undefined,
       model: firstCpe?.product || undefined,
       cpes: selectedCpes.length > 0 ? selectedCpes : undefined,
+      isExternallyFacing: fields.isExternallyFacing,
     };
   }
 

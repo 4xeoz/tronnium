@@ -20,7 +20,7 @@ async function triggerScheduledScan(environmentId: string, fromDate?: string | n
 
     await markScheduleRan(environmentId);
 
-    runScan(environmentId, scan.id, { fromDate: fromDate ?? undefined }).catch((e) => {
+    runScan(environmentId, scan.id, { fromDate: fromDate ? new Date(fromDate) : undefined }).catch((e) => {
       console.error(`[Scheduler] Scan failed for environment ${environmentId}:`, e.message);
     });
   } catch (e: any) {

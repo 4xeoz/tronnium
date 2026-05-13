@@ -22,14 +22,16 @@ export type Asset = {
   manufacturer: string | null;
   model: string | null;
   serialNumber: string | null;
+  isExternallyFacing: boolean;  
   cpes: CpeCandidate[];
   tags: string[];
   createdAt: string;
   updatedAt: string;
 };
 
-export type RelationType = "DEPENDS_ON" | "CONTROLS" | "PROVIDES_SERVICE" | "SHARES_DATA_WITH";
+export type RelationType = "NETWORK_CONNECTS_TO" | "MANAGED_BY" | "AUTHENTICATES_VIA" | "EXECUTES_CODE_FROM" | "RECEIVES_DATA_FROM" | "SHARES_CREDENTIALS_WITH";
 export type CriticalityLevel = "low" | "medium" | "high";
+export type SecurityCriticalityLevel = "low" | "medium" | "high" | "critical";
 
 export type Relationship = {
   id: string;
@@ -37,7 +39,8 @@ export type Relationship = {
   fromAssetId: string;
   toAssetId: string;
   type: RelationType;
-  criticality: CriticalityLevel;
+  operationalCriticality: CriticalityLevel;
+  securityCriticality: SecurityCriticalityLevel;
   createdAt: string;
   updatedAt: string;
   fromAsset?: { id: string; name: string; type: string };
@@ -135,6 +138,8 @@ export type CreateAssetInput = {
   serialNumber?: string;
   cpes?: CpeCandidate[];
   domain?: "IT" | "OT" | "UNKNOWN";
+  isExternallyFacing?: boolean;   
+
 };
 
 // ─── Asset Fetch Functions ───────────────────────────────────
@@ -265,12 +270,13 @@ export async function createRelationship(
   fromAssetId: string,
   toAssetId: string,
   type: RelationType,
-  criticality: CriticalityLevel
+  operationalCriticality: CriticalityLevel,
+  securityCriticality: SecurityCriticalityLevel
 ): Promise<ApiResponse<Relationship>> {
   return apiFetch<Relationship>(`/relationships/${environmentId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fromAssetId, toAssetId, type, criticality }),
+    body: JSON.stringify({ fromAssetId, toAssetId, type, operationalCriticality, securityCriticality }),
   });
 }
 
@@ -278,12 +284,17 @@ export async function updateRelationship(
   environmentId: string,
   relationshipId: string,
   type?: RelationType,
-  criticality?: CriticalityLevel
+  operationalCriticality?: CriticalityLevel,
+  securityCriticality?: SecurityCriticalityLevel
 ): Promise<ApiResponse<Relationship>> {
   return apiFetch<Relationship>(`/relationships/${environmentId}/${relationshipId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...(type && { type }), ...(criticality && { criticality }) }),
+    body: JSON.stringify({
+      ...(type && { type }),
+      ...(operationalCriticality && { operationalCriticality }),
+      ...(securityCriticality && { securityCriticality }),
+    }),
   });
 }
 

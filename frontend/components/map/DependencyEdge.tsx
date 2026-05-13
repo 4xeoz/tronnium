@@ -6,7 +6,7 @@ import {
   getBezierPath,
   EdgeLabelRenderer,
 } from "reactflow";
-import type { CriticalityLevel } from "@/lib/api";
+import type { SecurityCriticalityLevel } from "@/lib/api";
 
 /**
  * Custom edge component for asset relationships
@@ -18,7 +18,7 @@ import type { CriticalityLevel } from "@/lib/api";
  * - Thicker strokes for higher criticality
  */
 
-function getCriticalityColor(criticality: CriticalityLevel | undefined): string {
+function getSecurityCriticalityColor(criticality: SecurityCriticalityLevel | undefined): string {
   if (!criticality) return "var(--border)";
   switch (criticality) {
     case "low":
@@ -27,12 +27,14 @@ function getCriticalityColor(criticality: CriticalityLevel | undefined): string 
       return "var(--warning-text)";
     case "high":
       return "var(--error-text)";
+    case "critical":
+      return "var(--error-text)";
     default:
       return "var(--border)";
   }
 }
 
-function getCriticalityWidth(criticality: CriticalityLevel | undefined, selected: boolean): number {
+function getSecurityCriticalityWidth(criticality: SecurityCriticalityLevel | undefined, selected: boolean): number {
   if (selected) return 3;
   if (!criticality) return 1.5;
   switch (criticality) {
@@ -42,6 +44,8 @@ function getCriticalityWidth(criticality: CriticalityLevel | undefined, selected
       return 2;
     case "high":
       return 2.5;
+    case "critical":
+      return 3;
     default:
       return 1.5;
   }
@@ -59,11 +63,11 @@ function DependencyEdge({
   selected,
   markerEnd,
 }: EdgeProps) {
-  const criticality = data?.relationship?.criticality as CriticalityLevel | undefined;
-  const relationType = (data?.relationship?.type || "DEPENDS_ON") as string;
+  const securityCriticality = data?.relationship?.securityCriticality as SecurityCriticalityLevel | undefined;
+  const relationType = (data?.relationship?.type || "NETWORK_CONNECTS_TO") as string;
 
-  const color = selected ? "var(--brand-color-1)" : getCriticalityColor(criticality);
-  const strokeWidth = getCriticalityWidth(criticality, !!selected);
+  const color = selected ? "var(--brand-color-1)" : getSecurityCriticalityColor(securityCriticality);
+  const strokeWidth = getSecurityCriticalityWidth(securityCriticality, !!selected);
 
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -143,20 +147,20 @@ function DependencyEdge({
           `}
         >
           <span>{typeLabel}</span>
-          {criticality && (
+          {securityCriticality && (
             <span className="ml-1.5 inline-block px-1.5 py-0.5 rounded text-[7px] font-bold" style={{ backgroundColor: color, color: 'white' }}>
-              {criticality.toUpperCase()}
+              {securityCriticality.toUpperCase()}
             </span>
           )}
         </div>
       </EdgeLabelRenderer>
 
-      {/* Criticality indicator dot on the path */}
-      {criticality && (
+      {/* Security criticality indicator dot on the path */}
+      {securityCriticality && (
         <circle
           cx={labelX}
           cy={labelY}
-          r={criticality === "high" ? 2.5 : criticality === "medium" ? 2 : 1.5}
+          r={securityCriticality === "critical" ? 3 : securityCriticality === "high" ? 2.5 : securityCriticality === "medium" ? 2 : 1.5}
           fill={color}
           opacity={selected ? 1 : 0.5}
           className="transition-all duration-200"

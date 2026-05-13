@@ -121,6 +121,9 @@ model Asset {
   model         String?     // Model name or number
   serialNumber  String?     // Serial number or asset tag
 
+  // External exposure
+  isExternallyFacing Boolean @default(false) // Whether the asset is exposed to the public internet
+
   // CPEs selected by user with full metadata (score, breakdown, cpeNameId)
   // Related AssetCpe records with deconstruction and ranking metadata
   cpes          AssetCpe[]  
@@ -185,7 +188,8 @@ model Relationship {
 
   type          RelationType   
 
-  criticality   RelationshipCriticality @default(MEDIUM)
+  operationalCriticality   RelationshipCriticality @default(MEDIUM)
+  securityCriticality RelationshipCriticality @default(LOW)
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -203,11 +207,12 @@ model Relationship {
 
 
 enum RelationType {
-  DEPENDS_ON
-  CONTROLS
-  PROVIDES_SERVICE
-  SHARES_DATA_WITH
-  
+  NETWORK_CONNECTS_TO
+  MANAGED_BY
+  AUTHENTICATES_VIA
+  EXECUTES_CODE_FROM
+  RECEIVES_DATA_FROM
+  SHARES_CREDENTIALS_WITH
 }
 
 

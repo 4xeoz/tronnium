@@ -7,11 +7,13 @@ import {
   FiSearch, FiShield, FiAlertTriangle,
   FiBarChart2, FiMap, FiCheckCircle,
   FiCode, FiAlertOctagon, FiUserX,
+  FiCrosshair,
 } from "react-icons/fi";
 import { useScan, useUser, type Asset } from "@/lib/api";
 import AddAssetSlideOver from "@/components/assets/AddAssetSlideOver";
 import AssetDetailsSlideOver from "@/components/assets/AssetDetailsSlideOver";
 import DevModeModal from "@/components/dev/DevModeModal";
+import AddTestVulnerabilityModal from "@/components/dev/AddTestVulnerabilityModal";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -27,8 +29,10 @@ import { ScanBreakdownCard } from "./ScanBreakdownCard";
 import { RecentScansCard } from "./RecentScansCard";
 import { SecurityStatusCard } from "./SecurityStatusCard";
 import { AutoScanCard } from "./AutoScanCard";
+import { AttackExposureCard } from "./AttackExposureCard";
 import { useEnvironment } from "@/lib/hooks/useEnvironment";
 import { useSchedule } from "@/lib/hooks/useSchedule";
+import { useEnvironmentRiskMap } from "@/lib/hooks/useEnvironmentRiskMap";
 
 export default function EnvironmentDashboardPage() {
   const params = useParams();
@@ -39,6 +43,7 @@ export default function EnvironmentDashboardPage() {
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [assetSearch, setAssetSearch] = useState("");
   const [isDevModalOpen, setIsDevModalOpen] = useState(false);
+  const [isTestVulnModalOpen, setIsTestVulnModalOpen] = useState(false);
   const [showAllAssets, setShowAllAssets] = useState(false);
   const { schedule, isLoading: scheduleLoading, isMutating: scheduleMutating, toggle: toggleSchedule, setFrequency: setScheduleFrequency } = useSchedule(envId);
 
@@ -63,6 +68,25 @@ export default function EnvironmentDashboardPage() {
   } = useEnvironment(envId);
 
   const assets = asset_data ?? [];
+
+  const { data: riskMap } = useEnvironmentRiskMap(envId);
+
+  const riskSummary = useMemo(() => {
+    if (!riskMap) return null;
+
+    const entryPointCount = riskMap.entryPoints.length;
+    const highestRisk = riskMap.assetRisks.reduce((max, risk) =>
+      risk.maxCompromiseScore > (max?.score ?? 0)
+        ? { id: risk.assetId, score: risk.maxCompromiseScore }
+        : max
+    , null as { id: string; score: number } | null);
+
+    const highestRiskAsset = highestRisk
+      ? assets.find((a) => a.id === highestRisk.id)
+      : null;
+
+    return { entryPointCount, highestRisk, highestRiskAsset };
+  }, [riskMap, assets]);
 
   const assetsWithCPEs = useMemo(() => {
     return assets.filter((a) => Array.isArray(a.cpes) && a.cpes.length > 0).length;
@@ -185,6 +209,12 @@ export default function EnvironmentDashboardPage() {
               Dev
             </Button>
           )}
+          {user?.devMode && (
+            <Button variant="secondary" size="sm" onClick={() => setIsTestVulnModalOpen(true)}>
+              <FiShield className="w-4 h-4" />
+              Add Test Vuln
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={() => router.push(`/environments/${envId}/map`)}>
             <FiMap className="w-4 h-4" />
             Map View
@@ -208,7 +238,7 @@ export default function EnvironmentDashboardPage() {
         <div className="lg:col-span-2 flex flex-col gap-6 min-h-0">
 
           {/* Stat cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <StatCard
               icon={<FiServer className="w-4 h-4" />}
               iconBg="bg-brand-1/10 text-brand-1"
@@ -239,6 +269,18 @@ export default function EnvironmentDashboardPage() {
               value={overview?.resolvedThisWeek ?? 0}
               subtitle={totalActiveThreats > 0 ? `${totalActiveThreats} still open` : "All clear"}
               onClick={() => router.push(`/environments/${envId}/security`)}
+            />
+            <StatCard
+              icon={<FiCrosshair className="w-4 h-4" />}
+              iconBg="bg-error-bg text-error-text"
+              label="Attack Entry Points"
+              value={riskSummary?.entryPointCount ?? "—"}
+              subtitle={
+                riskSummary?.highestRiskAsset
+                  ? `${riskSummary.highestRiskAsset.name} (${Math.round(riskSummary.highestRisk?.score ?? 0)}%)`
+                  : "No risk data"
+              }
+              onClick={() => router.push(`/environments/${envId}/map`)}
             />
           </div>
 
@@ -338,6 +380,8 @@ export default function EnvironmentDashboardPage() {
             onRescan={() => contextStartScan(envId)}
           />
 
+          <AttackExposureCard riskSummary={riskSummary} envId={envId} />
+
           <div className="bg-surface rounded-2xl border border-border p-5 shrink-0">
             <h3 className="font-bold text-text-primary mb-4 flex items-center gap-2 text-[18px] tracking-[-0.2px]">
               <FiBarChart2 className="w-5 h-5 text-brand-1" />
@@ -373,6 +417,13 @@ export default function EnvironmentDashboardPage() {
         onAssetDeleted={() => { setSelectedAsset(null); refetch(); }}
       />
       <DevModeModal isOpen={isDevModalOpen} onClose={() => setIsDevModalOpen(false)} />
+      <AddTestVulnerabilityModal
+        isOpen={isTestVulnModalOpen}
+        onClose={() => setIsTestVulnModalOpen(false)}
+        environmentId={envId}
+        assets={assets}
+        onCreated={() => refetch()}
+      />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { fetchCvesForCpe, getMaxLookbackDate, isValidLookbackDate } from "../sca
 import { AssetCpe, ScanStatus } from "@prisma/client";
 import { getOrCreateWorkflow, shouldHideVulnerability } from "../vulnerability-workflows/public";
 import type { ScanProgress, ScanResult, ScanOptions } from "./scan.types";
-import { countSeverities, calculateRiskScore, whereNotMock } from "../../lib/severity";
+import { countSeverities, calculateRiskScore } from "../../lib/severity";
 import { fetchEpssForCves }       from "../../lib/epss.service";
 import { calculateEpssRiskScore } from "../../lib/severity";
 
@@ -40,16 +40,15 @@ async function resolveScanFromDate(
       where: {
         environmentId,
         status: ScanStatus.COMPLETED,
-        ...whereNotMock,
       },
       orderBy: { completedAt: "desc" },
     });
 
     if (lastScan?.completedAt) {
-      console.log(`[Scan] Using last real scan date: ${lastScan.completedAt.toISOString()}`);
+      console.log(`[Scan] Using last scan date: ${lastScan.completedAt.toISOString()}`);
       return lastScan.completedAt;
     } else {
-      console.log(`[Scan] No previous real scan found, will scan all CVEs`);
+      console.log(`[Scan] No previous scan found, will scan all CVEs`);
       return undefined;
     }
   }
@@ -374,7 +373,6 @@ export async function getLatestScan(environmentId: string) {
     where: {
       environmentId,
       status: { in: [ScanStatus.COMPLETED, ScanStatus.IN_PROGRESS] },
-      ...whereNotMock,
     },
     orderBy: { createdAt: "desc" },
     include: SCAN_WITH_ASSETS_INCLUDE,
@@ -385,7 +383,6 @@ export async function getScanHistory(environmentId: string, limit: number = 10) 
   return await prisma.securityScan.findMany({
     where: {
       environmentId,
-      ...whereNotMock,
     },
     orderBy: { createdAt: "desc" },
     take: limit,

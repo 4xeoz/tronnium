@@ -65,6 +65,34 @@ export type ClearMockVulnerabilitiesResponse = {
   deletedScans: number;
 };
 
+export type CreateTestVulnerabilityRequest = {
+  environmentId: string;
+  assetId: string;
+  cveId: string;
+  cvssScore?: number;
+  cvssVector?: string;
+  epssPercentile?: number;
+  description?: string;
+  severity?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
+};
+
+export type CreateTestVulnerabilityResponse = {
+  vulnerability: {
+    id: string;
+    cveId: string;
+    description: string;
+    cvssScore: number | null;
+    cvssVector: string | null;
+    epssPercentile: number | null;
+    severity: string;
+    isMock: boolean;
+  };
+  workflow: {
+    id: string;
+    status: string;
+  };
+};
+
 // ─── Fetch Functions ─────────────────────────────────────────
 
 export async function fetchMockVulnerabilities(environmentId: string): Promise<ApiResponse<MockVulnerability[]>> {
@@ -93,5 +121,15 @@ export async function generateMockVulnerabilities(
 export async function clearMockVulnerabilities(environmentId: string): Promise<ApiResponse<ClearMockVulnerabilitiesResponse>> {
   return apiFetch<ClearMockVulnerabilitiesResponse>(`/dev/mock-vulnerabilities/${environmentId}`, {
     method: "DELETE",
+  });
+}
+
+export async function createTestVulnerability(
+  payload: CreateTestVulnerabilityRequest
+): Promise<ApiResponse<CreateTestVulnerabilityResponse>> {
+  return apiFetch<CreateTestVulnerabilityResponse>("/dev/create-test-vulnerability", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 }

@@ -11,17 +11,19 @@ interface RelationshipSidebarProps {
   edge: Edge;
   assets: Asset[];
   onClose: () => void;
-  onUpdate: (type: string, criticality: string) => void;
+  onUpdate: (type: string, operationalCriticality: string, securityCriticality: string) => void;
   onDelete: () => void;
   isLoading?: boolean;
   error?: string | null;
 }
 
 const RELATIONSHIP_TYPES = [
-  { value: "DEPENDS_ON", label: "Depends On" },
-  { value: "CONTROLS", label: "Controls" },
-  { value: "PROVIDES_SERVICE", label: "Provides Service" },
-  { value: "SHARES_DATA_WITH", label: "Shares Data With" },
+  { value: "NETWORK_CONNECTS_TO", label: "Network Connects To" },
+  { value: "MANAGED_BY", label: "Managed By" },
+  { value: "AUTHENTICATES_VIA", label: "Authenticates Via" },
+  { value: "EXECUTES_CODE_FROM", label: "Executes Code From" },
+  { value: "RECEIVES_DATA_FROM", label: "Receives Data From" },
+  { value: "SHARES_CREDENTIALS_WITH", label: "Shares Credentials With" },
 ];
 
 const CRITICALITY_LEVELS = [
@@ -30,27 +32,37 @@ const CRITICALITY_LEVELS = [
   { value: "high", label: "High", colorClass: "text-error-text" },
 ];
 
+const SECURITY_CRITICALITY_LEVELS = [
+  { value: "low", label: "Low", colorClass: "text-success-text" },
+  { value: "medium", label: "Medium", colorClass: "text-warning-text" },
+  { value: "high", label: "High", colorClass: "text-error-text" },
+  { value: "critical", label: "Critical", colorClass: "text-error-text" },
+];
+
 export default function RelationshipSidebar({ edge, assets, onClose, onUpdate, onDelete, isLoading = false, error = null }: RelationshipSidebarProps) {
   const relationship = edge.data?.relationship;
-  const [type, setType] = useState(relationship?.type || "DEPENDS_ON");
-  const [criticality, setCriticality] = useState(relationship?.criticality || "medium");
+  const [type, setType] = useState(relationship?.type || "NETWORK_CONNECTS_TO");
+  const [operationalCriticality, setOperationalCriticality] = useState(relationship?.operationalCriticality || "medium");
+  const [securityCriticality, setSecurityCriticality] = useState(relationship?.securityCriticality || "low");
   const [isEditing, setIsEditing] = useState(false);
 
   const sourceAsset = assets.find(a => a.id === edge.source);
   const targetAsset = assets.find(a => a.id === edge.target);
 
   const handleSave = () => {
-    onUpdate(type, criticality);
+    onUpdate(type, operationalCriticality, securityCriticality);
     setIsEditing(false);
   };
 
   const handleCancel = () => {
-    setType(relationship?.type || "DEPENDS_ON");
-    setCriticality(relationship?.criticality || "medium");
+    setType(relationship?.type || "NETWORK_CONNECTS_TO");
+    setOperationalCriticality(relationship?.operationalCriticality || "medium");
+    setSecurityCriticality(relationship?.securityCriticality || "low");
     setIsEditing(false);
   };
 
-  const selectedCriticality = CRITICALITY_LEVELS.find(c => c.value === criticality);
+  const selectedOperationalCriticality = CRITICALITY_LEVELS.find(c => c.value === operationalCriticality);
+  const selectedSecurityCriticality = SECURITY_CRITICALITY_LEVELS.find(c => c.value === securityCriticality);
 
   return (
     <div className="w-80 bg-surface border-l border-border h-full overflow-y-auto flex flex-col">
@@ -108,14 +120,27 @@ export default function RelationshipSidebar({ edge, assets, onClose, onUpdate, o
           </div>
 
           <div>
-            <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Criticality Level</label>
+            <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Operational Criticality</label>
             {isEditing ? (
-              <Select value={criticality} onChange={(e) => setCriticality(e.target.value)}>
+              <Select value={operationalCriticality} onChange={(e) => setOperationalCriticality(e.target.value)}>
                 {CRITICALITY_LEVELS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </Select>
             ) : (
-              <div className={`px-3 py-2.5 bg-background-secondary rounded-[10px] font-semibold text-[15px] ${selectedCriticality?.colorClass || 'text-text-primary'}`}>
-                {selectedCriticality?.label || criticality}
+              <div className={`px-3 py-2.5 bg-background-secondary rounded-[10px] font-semibold text-[15px] ${selectedOperationalCriticality?.colorClass || 'text-text-primary'}`}>
+                {selectedOperationalCriticality?.label || operationalCriticality}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-semibold uppercase tracking-[0.4px] text-text-secondary mb-2">Security Criticality</label>
+            {isEditing ? (
+              <Select value={securityCriticality} onChange={(e) => setSecurityCriticality(e.target.value)}>
+                {SECURITY_CRITICALITY_LEVELS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </Select>
+            ) : (
+              <div className={`px-3 py-2.5 bg-background-secondary rounded-[10px] font-semibold text-[15px] ${selectedSecurityCriticality?.colorClass || 'text-text-primary'}`}>
+                {selectedSecurityCriticality?.label || securityCriticality}
               </div>
             )}
           </div>
