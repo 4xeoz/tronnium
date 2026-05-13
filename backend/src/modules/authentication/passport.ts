@@ -41,24 +41,26 @@ export function configurePassport() {
     })
   );
 
-  // Google OAuth Strategy
-  passport.use(
-    new GoogleStrategy(
-      {
-        clientID: appConfig.googleClientId,
-        clientSecret: appConfig.googleClientSecret,
-        callbackURL: appConfig.googleCallbackUrl,
-      },
-      async (accessToken, refreshToken, profile, done) => {
-        try {
-          const user = await userService.findOrCreateByGoogleProfile(profile);
-          return done(null, userService.toPublic(user));
-        } catch (error) {
-          return done(error as Error);
+  // Google OAuth Strategy (only when configured)
+  if (appConfig.googleClientId) {
+    passport.use(
+      new GoogleStrategy(
+        {
+          clientID: appConfig.googleClientId,
+          clientSecret: appConfig.googleClientSecret,
+          callbackURL: appConfig.googleCallbackUrl,
+        },
+        async (accessToken, refreshToken, profile, done) => {
+          try {
+            const user = await userService.findOrCreateByGoogleProfile(profile);
+            return done(null, userService.toPublic(user));
+          } catch (error) {
+            return done(error as Error);
+          }
         }
-      }
-    )
-  );
+      )
+    );
+  }
 
   isConfigured = true;
   console.log("[Passport] Configured successfully");
