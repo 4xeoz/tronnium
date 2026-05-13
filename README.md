@@ -1,7 +1,6 @@
 
 
-**`README.md`**
-```markdown
+
 # Tronnium
 
 ## Requirements
@@ -15,8 +14,8 @@
 ### Step 1 — Get the files
 
 You need two things:
-- This repository (zip or git clone)
-- The vector database image: `tronnium-vectors.tar` (shared separately via Google Drive)
+- This repository (zip )
+- The vector database image: `tronnium-vectors.tar` (found after unzipping the "main" file)
 
 Place `tronnium-vectors.tar` in the same folder as `docker-compose.yml`.
 
