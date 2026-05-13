@@ -11,6 +11,26 @@ jobs:
     name: Backend — type-check & test
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tronnium_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tronnium_test
+      JWT_SECRET: ci-test-secret
+      NODE_ENV: test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -28,6 +48,10 @@ jobs:
       - name: Generate Prisma client
         working-directory: backend
         run: npx prisma generate
+
+      - name: Apply database migrations
+        working-directory: backend
+        run: npx prisma migrate deploy
 
       - name: Type-check
         working-directory: backend
