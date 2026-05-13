@@ -133,3 +133,35 @@ export async function createTestVulnerability(
     body: JSON.stringify(payload),
   });
 }
+
+// ─── Seed Templates ──────────────────────────────────────────
+
+export type SeedTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  longDescription: string;
+  tags: string[];
+};
+
+export type SeedResult = {
+  environmentId: string;
+  environmentName: string;
+  summary: {
+    assets: number;
+    vulnerabilities: number;
+    relationships: number;
+  };
+};
+
+export async function fetchSeedTemplates(): Promise<ApiResponse<SeedTemplate[]>> {
+  return apiFetch<SeedTemplate[]>("/dev/seed-templates");
+}
+
+export async function seedTemplate(templateId: string): Promise<ApiResponse<SeedResult>> {
+  return apiFetch<SeedResult>("/dev/seed-template", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ templateId }),
+  });
+}

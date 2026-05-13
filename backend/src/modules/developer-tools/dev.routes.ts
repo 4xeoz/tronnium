@@ -6,6 +6,8 @@ import {
   getMockVulnerabilitiesHandler,
   getMockVulnerabilityStatsHandler,
   createTestVulnerabilityHandler,
+  getSeedTemplatesHandler,
+  seedTemplateHandler,
 } from "./dev.controller";
 
 const devRouter = Router();
@@ -43,5 +45,18 @@ devRouter.get("/mock-vulnerabilities/:environmentId/stats", getMockVulnerability
  * Manually create a single test vulnerability for dev/testing
  */
 devRouter.post("/create-test-vulnerability", createTestVulnerabilityHandler);
+
+/**
+ * GET /dev/seed-templates
+ * List available demo environment templates
+ */
+devRouter.get("/seed-templates", getSeedTemplatesHandler);
+
+/**
+ * POST /dev/seed-template
+ * Seed a full demo environment from a template
+ * Body: { templateId: string }
+ */
+devRouter.post("/seed-template", seedTemplateHandler);
 
 export default devRouter;

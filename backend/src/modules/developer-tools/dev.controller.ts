@@ -9,6 +9,7 @@ import {
 import type { PublicUser } from "../../types/express";
 import { ok, err } from "../../lib/response-helpers";
 import { VulnSeverity, ScanStatus } from "@prisma/client";
+import { listSeedTemplates, seedEnvironment } from "./seed.service";
 
 /**
  * Generate mock vulnerabilities using LLM
@@ -307,6 +308,63 @@ export async function createTestVulnerabilityHandler(
     console.error("[CreateTestVulnerability] Error:", error);
     res.status(500).json(
       err("CREATE_FAILED", error.message || "Failed to create test vulnerability")
+    );
+  }
+}
+
+/**
+ * GET /dev/seed-templates
+ * Returns the list of available demo environment templates.
+ */
+export async function getSeedTemplatesHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  res.json(ok(listSeedTemplates(), "Seed templates loaded"));
+}
+
+/**
+ * POST /dev/seed-template
+ * Seeds a full demo environment from a template.
+ * Body: { templateId: string }
+ */
+export async function seedTemplateHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { templateId } = req.body;
+    const user = req.user as PublicUser;
+
+    if (!templateId || typeof templateId !== "string") {
+      res.status(400).json(err("INVALID_INPUT", "templateId is required"));
+      return;
+    }
+
+    const userAccount = await prisma.userAccount.findUnique({
+      where: { id: user.id },
+    });
+
+    if (!userAccount?.devMode) {
+      res.status(403).json(
+        err("DEV_MODE_REQUIRED", "Dev mode must be enabled to seed demo environments")
+      );
+      return;
+    }
+
+    const result = await seedEnvironment(user.id, templateId);
+
+    res.status(201).json(
+      ok(result, `Demo environment "${result.environmentName}" seeded successfully`)
+    );
+  } catch (error: any) {
+    console.error("[SeedTemplate] Error:", error);
+    if (error.message?.startsWith("Unknown template")) {
+      res.status(400).json(err("INVALID_INPUT", error.message));
+      return;
+    }
+    res.status(500).json(
+      err("SEED_FAILED", error.message || "Failed to seed demo environment")
     );
   }
 }

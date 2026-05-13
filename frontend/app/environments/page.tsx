@@ -13,6 +13,10 @@ import {
   FiTrash2,
   FiMoreHorizontal,
   FiEye,
+  FiZap,
+  FiTag,
+  FiLoader,
+  FiCheckCircle,
 } from "react-icons/fi";
 import { fetchEnvironments, deleteEnvironment, type Environment } from "@/lib/api";
 import CreateEnvironmentSlideOver from "@/components/environments/CreateEnvironmentSlideOver";
@@ -22,6 +26,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
+import { fetchSeedTemplates, seedTemplate, type SeedTemplate } from "@/lib/api/dev";
 
 function StatsRow({ environments }: { environments: Environment[] }) {
   const totalAssets = environments.reduce((acc, env) => acc + (env.assetCount ?? 0), 0);
@@ -172,6 +177,146 @@ function EnvironmentRow({
   );
 }
 
+const TAG_COLORS: Record<string, string> = {
+  IT: "bg-blue-500/10 text-blue-400",
+  OT: "bg-amber-500/10 text-amber-400",
+  "AV:A": "bg-purple-500/10 text-purple-400",
+  web: "bg-sky-500/10 text-sky-400",
+  database: "bg-emerald-500/10 text-emerald-400",
+  cloud: "bg-indigo-500/10 text-indigo-400",
+  "CI/CD": "bg-pink-500/10 text-pink-400",
+  secrets: "bg-rose-500/10 text-rose-400",
+  "zero-trust": "bg-orange-500/10 text-orange-400",
+  ICS: "bg-red-500/10 text-red-400",
+  SCADA: "bg-red-500/10 text-red-400",
+  PLC: "bg-red-500/10 text-red-400",
+  MES: "bg-amber-500/10 text-amber-400",
+  safety: "bg-yellow-500/10 text-yellow-400",
+  robots: "bg-lime-500/10 text-lime-400",
+};
+
+function TemplateTag({ tag }: { tag: string }) {
+  const cls = TAG_COLORS[tag] ?? "bg-surface-secondary text-text-muted";
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>
+      {tag}
+    </span>
+  );
+}
+
+function DemoTemplatesSection({ onSeeded }: { onSeeded: () => void }) {
+  const [templates, setTemplates] = useState<SeedTemplate[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [seedingId, setSeedingId] = useState<string | null>(null);
+  const [seededId, setSeededId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchSeedTemplates().then((res) => {
+      if (res.data) setTemplates(res.data);
+      setIsLoading(false);
+    });
+  }, []);
+
+  const handleSeed = async (templateId: string) => {
+    setSeedingId(templateId);
+    setSeededId(null);
+    try {
+      const res = await seedTemplate(templateId);
+      if (res.data) {
+        setSeededId(templateId);
+        setTimeout(() => setSeededId(null), 3000);
+        onSeeded();
+      }
+    } finally {
+      setSeedingId(null);
+    }
+  };
+
+  if (isLoading) return null;
+  if (templates.length === 0) return null;
+
+  return (
+    <div className="mt-8">
+      <div className="flex items-center gap-2 mb-3">
+        <FiZap className="w-4 h-4 text-brand-1" />
+        <h2 className="text-sm font-semibold text-text-primary">Demo Environments</h2>
+        <span className="text-xs text-text-muted">— pre-seeded templates for quick testing and showcase</span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        {templates.map((template) => {
+          const isExpanded = expanded === template.id;
+          const isSeeding = seedingId === template.id;
+          const isSeeded = seededId === template.id;
+
+          return (
+            <div
+              key={template.id}
+              className="rounded-[16px] border border-border bg-surface p-4 flex flex-col gap-3"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-text-primary truncate">{template.name}</h3>
+                  <p className="text-xs text-text-muted mt-0.5 line-clamp-2">{template.description}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-1">
+                {template.tags.map((tag) => (
+                  <TemplateTag key={tag} tag={tag} />
+                ))}
+              </div>
+
+              {isExpanded && (
+                <p className="text-xs text-text-muted leading-relaxed border-t border-border pt-3">
+                  {template.longDescription}
+                </p>
+              )}
+
+              <div className="flex items-center justify-between gap-2 mt-auto pt-1 border-t border-border">
+                <button
+                  onClick={() => setExpanded(isExpanded ? null : template.id)}
+                  className="text-[11px] text-text-muted hover:text-text-primary transition-colors"
+                >
+                  {isExpanded ? "Less" : "Details"}
+                </button>
+
+                <button
+                  onClick={() => handleSeed(template.id)}
+                  disabled={isSeeding || !!seedingId}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isSeeded
+                      ? "bg-green-500/10 text-green-400"
+                      : "bg-brand-1 text-white hover:opacity-90"
+                  }`}
+                >
+                  {isSeeding ? (
+                    <>
+                      <FiLoader className="w-3 h-3 animate-spin" />
+                      Seeding...
+                    </>
+                  ) : isSeeded ? (
+                    <>
+                      <FiCheckCircle className="w-3 h-3" />
+                      Created
+                    </>
+                  ) : (
+                    <>
+                      <FiPlus className="w-3 h-3" />
+                      Seed
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function EnvironmentsPage() {
   const router = useRouter();
   const [environments, setEnvironments] = useState<Environment[]>([]);
@@ -300,6 +445,8 @@ export default function EnvironmentsPage() {
           </div>
         )}
       </div>
+
+      <DemoTemplatesSection onSeeded={loadEnvironments} />
 
       <CreateEnvironmentSlideOver
         isOpen={isSlideOverOpen}

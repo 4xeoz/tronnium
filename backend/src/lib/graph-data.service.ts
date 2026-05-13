@@ -293,6 +293,14 @@ function computeVulnMultiplier(
     multiplier *= 1.5;
   }
 
+  // Penalty when all pivot vulns are adjacent-only (AV:A): attacker must be
+  // on the same network segment, making remote exploitation much harder.
+  const allPivotsAdjacentOnly =
+    pivotVulns.length > 0 && pivotVulns.every((c) => c.isAdjacentOnly);
+  if (allPivotsAdjacentOnly) {
+    multiplier *= 1.5;
+  }
+
   return multiplier;
 }
 

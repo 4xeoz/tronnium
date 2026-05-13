@@ -88,6 +88,7 @@ export type VulnClassification = {
   requiresUserInteraction: boolean;
   isHighConfidence: boolean;
   isDoSOnly: boolean;
+  isAdjacentOnly: boolean;
 };
 
 /**
@@ -136,6 +137,8 @@ export function classifyVuln(
   const isDoSOnly =
     availability === "H" && confidentiality === "N" && integrity === "N";
 
+  const isAdjacentOnly = attackVector === "A";
+
   return {
     enablesNetworkPivot,
     enablesCredentialTheft,
@@ -144,5 +147,6 @@ export function classifyVuln(
     requiresUserInteraction,
     isHighConfidence,
     isDoSOnly,
+    isAdjacentOnly,
   };
 }
