@@ -55,9 +55,9 @@ const status = wf?.status ?? VulnStatus.OPEN;
 
 Resolved/closed states (`RESOLVED`, `FALSE_POSITIVE`, `RISK_ACCEPTED`) are excluded from open counts, severity totals, and overdue calculations.
 
-### `whereNotMock` filtering
+### Mock data inclusion
 
-All scan queries exclude mock/demo data (`isMock: false`).
+Mock/demo vulnerabilities (`isMock: true`) are treated identically to real scan findings across all queries, dashboards, and scan history.
 
 ### Asset vulnerability map
 

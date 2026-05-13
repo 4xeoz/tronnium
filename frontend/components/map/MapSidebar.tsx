@@ -1,14 +1,16 @@
 "use client"
 
+
 import { useEffect } from 'react'
-import { FiX, FiCpu, FiDatabase, FiServer, FiWifi, FiShield, FiHardDrive, FiShieldOff } from 'react-icons/fi'
+import { FiX, FiCpu, FiDatabase, FiServer, FiWifi, FiShield, FiHardDrive, FiShieldOff, FiActivity } from 'react-icons/fi'
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Asset } from '@/lib/api'
-import { getWorkflows, type WorkflowItem, getStatusLabel, type VulnStatus } from '@/lib/api/vulnerabilityWorkflow'
+import { fetchVulnerabilityWorkflows, type WorkflowItem, type VulnStatus } from '@/lib/api/vulnerabilityWorkflow'
 import { AgeBadge, Badge } from '@/components/security/SecurityUI'
 import type { SelectedVuln } from '@/components/security/VulnDetailSlideOver'
 import { SEVERITY_ORDER, STATUS_COLORS, getInitials } from '@/lib/securityConstants'
+import { getStatusLabel } from '@/lib/formatters'
 
 interface MapSidebarProps {
   asset: Asset | null;
@@ -16,6 +18,9 @@ interface MapSidebarProps {
   onClose: () => void;
   onVulnClick: (vuln: SelectedVuln) => void;
   onWorkflowsLoaded?: (workflows: WorkflowItem[]) => void;
+  analysisAssetId?: string | null;
+  setAnalysisAssetId?: (id: string | null) => void;
+  isAnalyzing?: boolean;
 }
 
 const typeIcons: Record<string, React.ElementType> = {
@@ -37,29 +42,29 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
   )
 }
 
-export default function MapSidebar({ asset, environmentId, onClose, onVulnClick, onWorkflowsLoaded }: MapSidebarProps) {
+export default function MapSidebar({ asset, environmentId, onClose, onVulnClick, onWorkflowsLoaded, analysisAssetId, setAnalysisAssetId, isAnalyzing }: MapSidebarProps) {
   const Icon = typeIcons[asset?.type ?? 'unknown'] || typeIcons.unknown
   const cpeList = Array.isArray(asset?.cpes) ? asset!.cpes : []
   const isActive = asset?.status === 'active'
 
   const { data: workflowsRes, isLoading: workflowsLoading } = useQuery({
     queryKey: ['assetWorkflows', environmentId, asset?.id],
-    queryFn: async () => getWorkflows(environmentId, { assetId: asset!.id }),
+    queryFn: async () => (await fetchVulnerabilityWorkflows(environmentId, { assetId: asset!.id })).data,
     enabled: !!asset,
     staleTime: 60 * 1000,
   })
 
-  const workflows = workflowsRes?.data ?? []
+  const workflows = workflowsRes ?? []
   const sortedWorkflows = [...workflows].sort((a, b) => (SEVERITY_ORDER[b.severity] ?? 0) - (SEVERITY_ORDER[a.severity] ?? 0))
 
   useEffect(() => {
-    if (workflowsRes?.data && workflowsRes.data.length > 0) onWorkflowsLoaded?.(workflowsRes.data)
-  }, [workflowsRes?.data, onWorkflowsLoaded])
+    if (workflowsRes && workflowsRes.length > 0) onWorkflowsLoaded?.(workflowsRes)
+  }, [workflowsRes, onWorkflowsLoaded])
 
   if (!asset) return null
 
   return (
-    <div className="w-80 h-full bg-surface border-l border-border flex flex-col">
+    <div className="w-80 h-screen bg-surface border-l border-border flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <h2 className="text-sm font-semibold text-text-primary">Asset Details</h2>
         <button
@@ -70,7 +75,7 @@ export default function MapSidebar({ asset, environmentId, onClose, onVulnClick,
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 space-y-4">
+      <div className="flex-1 overflow-auto p-4 space-y-4 ">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-brand-1/10 flex items-center justify-center text-brand-1">
             <Icon className="w-5 h-5" />
@@ -99,6 +104,7 @@ export default function MapSidebar({ asset, environmentId, onClose, onVulnClick,
           <DetailRow label="IP Address" value={asset.ipAddress} />
           <DetailRow label="Manufacturer" value={asset.manufacturer} />
           <DetailRow label="Description" value={asset.description} />
+          <DetailRow label="Externally Facing" value={asset.isExternallyFacing ? 'Yes — exposed to public internet' : 'No'} />
           <DetailRow label="Asset ID" value={asset.id} />
         </div>
 
@@ -177,6 +183,27 @@ export default function MapSidebar({ asset, environmentId, onClose, onVulnClick,
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {setAnalysisAssetId && (
+          <div className="pt-2">
+            <button
+              onClick={() => setAnalysisAssetId(analysisAssetId === asset.id ? null : asset.id)}
+              disabled={isAnalyzing}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-semibold transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed ${
+                analysisAssetId === asset.id
+                  ? 'bg-brand-1 text-white hover:bg-brand-1/90'
+                  : 'bg-background-secondary text-text-primary hover:bg-surface-secondary border border-border'
+              }`}
+            >
+              {isAnalyzing ? (
+                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <FiActivity className="w-4 h-4" />
+              )}
+              {isAnalyzing ? 'Analyzing...' : analysisAssetId === asset.id ? 'Clear Analysis' : 'Analyze Blast Radius'}
+            </button>
           </div>
         )}
       </div>

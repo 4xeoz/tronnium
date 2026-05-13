@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
-import { FiCpu, FiServer, FiDatabase, FiWifi, FiShield, FiHardDrive } from "react-icons/fi";
+import { FiCpu, FiServer, FiDatabase, FiWifi, FiShield, FiHardDrive, FiGlobe, FiLock } from "react-icons/fi";
 import type { Asset, ScanSeverity } from "@/lib/api";
 import type { VulnSummary } from "@/app/environments/[envId]/map/page";
 
@@ -39,7 +39,29 @@ const VULN_BADGE: Record<ScanSeverity, { bg: string; text: string; label: string
   UNKNOWN:  { bg: "bg-gray-400",   text: "text-white", label: "?" },
 };
 
-function AssetNode({ data, selected }: NodeProps<{ asset: Asset; label: string; vulnSummary?: VulnSummary }>) {
+function getTintColor(score: number): string {
+  if (score <= 30) {
+    const intensity = 0.08 + (score / 30) * 0.22;
+    return `rgba(34, 197, 94, ${intensity})`;
+  }
+  if (score <= 60) {
+    const intensity = 0.08 + ((score - 30) / 30) * 0.22;
+    return `rgba(245, 158, 11, ${intensity})`;
+  }
+  const intensity = 0.08 + ((score - 60) / 40) * 0.22;
+  return `rgba(239, 68, 68, ${intensity})`;
+}
+
+function AssetNode({ data, selected }: NodeProps<{
+  asset: Asset;
+  label: string;
+  vulnSummary?: VulnSummary;
+  isEntryPoint?: boolean;
+  riskOverlay?: { compromiseScore: number; knowledgeScore: number; hops: number } | null;
+  isGated?: boolean;
+  isAnalysisSource?: boolean;
+  isAnalysisModeActive?: boolean;
+}>) {
   const asset = data.asset;
   const vulnSummary = data.vulnSummary;
   const cpeCount = Array.isArray(asset.cpes) ? asset.cpes.length : 0;
@@ -50,8 +72,27 @@ function AssetNode({ data, selected }: NodeProps<{ asset: Asset; label: string; 
   const sev = vulnSummary?.highestSeverity;
   const hasVulns = (vulnSummary?.total ?? 0) > 0;
 
+  const ro = data.riskOverlay;
+  const isGated = data.isGated;
+  const isAnalysisSource = data.isAnalysisSource;
+  const isAnalysisModeActive = data.isAnalysisModeActive;
+
+  // Background tint from compromise score
+  const tintColor = ro ? getTintColor(ro.compromiseScore) : undefined;
+  const scoreBadge = ro ? `${Math.round(ro.compromiseScore)}%` : null;
+
+  // Outer opacity: gated = 40%, unrelated in analysis mode = 50%
+  let outerOpacity = 1;
+  if (isGated) {
+    outerOpacity = 0.4;
+  } else if (isAnalysisModeActive && !isAnalysisSource && !ro) {
+    outerOpacity = 0.5;
+  }
+
   const borderClass = selected
     ? "border-brand-1"
+    : isAnalysisSource
+    ? "border-[var(--brand-color-1)]"
     : sev
     ? SEVERITY_BORDER[sev]
     : "border-border hover:border-border-secondary";
@@ -75,9 +116,14 @@ function AssetNode({ data, selected }: NodeProps<{ asset: Asset; label: string; 
       <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-border !border-surface" />
 
       <div
-        className="relative group"
-        style={{ filter: glowFilter }}
+        className="relative group transition-opacity duration-200"
+        style={{ filter: glowFilter, opacity: outerOpacity }}
       >
+        {/* Analysis source ring */}
+        {isAnalysisSource && (
+          <div className="absolute -inset-1 rounded-xl border-2 border-[var(--brand-color-1)] pointer-events-none" />
+        )}
+
         {/* Critical pulsing ring */}
         {sev === "CRITICAL" && (
           <div className="absolute inset-0 rounded-xl border-2 border-red-500 animate-pulse pointer-events-none" />
@@ -85,8 +131,46 @@ function AssetNode({ data, selected }: NodeProps<{ asset: Asset; label: string; 
 
         {/* Card */}
         <div
-          className={`w-48 rounded-xl border bg-surface px-3 py-3 transition-all duration-200 ${borderClass}`}
+          className={`w-48 rounded-xl border bg-surface px-3 py-3 transition-all duration-200 ${borderClass} relative`}
+          style={tintColor ? { backgroundColor: tintColor } : undefined}
         >
+          {/* Externally facing indicator */}
+          {asset.isExternallyFacing && (
+            <div
+              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-warning-bg border border-warning-border flex items-center justify-center z-10"
+              title="Externally facing (public internet)"
+            >
+              <FiGlobe className="w-2.5 h-2.5 text-warning-text" />
+            </div>
+          )}
+
+          {/* Entry point indicator */}
+          {data.isEntryPoint && (
+            <div
+              className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-info-bg border border-info-border flex items-center justify-center z-10"
+              title="Entry point asset"
+            >
+              <FiShield className="w-2.5 h-2.5 text-info-text" />
+            </div>
+          )}
+
+          {/* Gated lock icon */}
+          {isGated && (
+            <div
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/90 border border-border flex items-center justify-center z-20"
+              title="Gated — exploitability check failed"
+            >
+              <FiLock className="w-4 h-4 text-text-muted" />
+            </div>
+          )}
+
+          {/* Analysis source label */}
+          {isAnalysisSource && (
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-[var(--brand-color-1)] text-white text-[8px] font-bold uppercase tracking-wider z-10">
+              Origin
+            </div>
+          )}
+
           {/* Top row: icon + name + status dot */}
           <div className="flex items-center gap-2.5">
             <div
@@ -124,6 +208,11 @@ function AssetNode({ data, selected }: NodeProps<{ asset: Asset; label: string; 
                 {cpeCount} CPE{cpeCount > 1 ? "s" : ""}
               </span>
             )}
+            {asset.isExternallyFacing && (
+              <span className="px-1.5 py-0.5 rounded bg-warning-bg text-warning-text text-[9px] font-medium border border-warning-border">
+                Public
+              </span>
+            )}
             {asset.ipAddress && (
               <span className="px-1.5 py-0.5 rounded bg-surface-secondary text-text-muted text-[9px] font-mono truncate max-w-[72px]">
                 {asset.ipAddress}
@@ -133,6 +222,20 @@ function AssetNode({ data, selected }: NodeProps<{ asset: Asset; label: string; 
             {hasVulns && badge && (
               <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${badge.bg} ${badge.text}`}>
                 {badgeCount} {badge.label}
+              </span>
+            )}
+            {/* Compromise score badge */}
+            {scoreBadge && (
+              <span
+                className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white"
+                style={{
+                  backgroundColor:
+                    ro!.compromiseScore > 60 ? "rgba(239,68,68,0.9)" :
+                    ro!.compromiseScore > 30 ? "rgba(245,158,11,0.9)" :
+                    "rgba(34,197,94,0.9)",
+                }}
+              >
+                {scoreBadge}
               </span>
             )}
           </div>

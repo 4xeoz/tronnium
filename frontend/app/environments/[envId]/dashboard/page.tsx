@@ -1,95 +1,155 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   FiBox, FiServer, FiPlus, FiCpu,
-  FiSearch, FiShield, FiAlertTriangle, FiBarChart2, FiClock, FiPlay,
-  FiMap, FiZap, FiCheckCircle, FiCode, FiAlertOctagon,
-  FiUserX, FiList, FiChevronRight, FiXCircle,
+  FiSearch, FiShield, FiAlertTriangle,
+  FiBarChart2, FiMap, FiCheckCircle,
+  FiCode, FiAlertOctagon, FiUserX,
+  FiCrosshair,
 } from "react-icons/fi";
-import { getEnvironment, getAssets, type Environment, type Asset } from "@/lib/api";
-import { useScan, useUser } from "@/lib/api";
-import { getDashboardOverview, type DashboardOverview } from "@/lib/api/dashboard";
+import { useScan, useUser, type Asset } from "@/lib/api";
 import AddAssetSlideOver from "@/components/assets/AddAssetSlideOver";
 import AssetDetailsSlideOver from "@/components/assets/AssetDetailsSlideOver";
 import DevModeModal from "@/components/dev/DevModeModal";
+import AddTestVulnerabilityModal from "@/components/dev/AddTestVulnerabilityModal";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { SEVERITY_ORDER } from "@/lib/securityConstants";
-import { RiskSentence } from "./RiskSentence";
-import { VulnBarChart } from "./VulnBarChart";
 import { AssetTypeDistribution } from "./AssetTypeDistribution";
 import { AssetCard } from "./AssetCard";
-
+import { StatCard } from "./StatCard";
+import { AttentionBanner } from "./AttentionBanner";
+import { AllClearBanner } from "./AllClearBanner";
+import { ScanBreakdownCard } from "./ScanBreakdownCard";
+import { RecentScansCard } from "./RecentScansCard";
+import { SecurityStatusCard } from "./SecurityStatusCard";
+import { AutoScanCard } from "./AutoScanCard";
+import { AttackExposureCard } from "./AttackExposureCard";
+import { useEnvironment } from "@/lib/hooks/useEnvironment";
+import { useSchedule } from "@/lib/hooks/useSchedule";
+import { useEnvironmentRiskMap } from "@/lib/hooks/useEnvironmentRiskMap";
 
 export default function EnvironmentDashboardPage() {
   const params = useParams();
   const router = useRouter();
   const envId = params.envId as string;
 
-  const [environment, setEnvironment] = useState<Environment | null>(null);
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [isAddAssetOpen, setIsAddAssetOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [assetSearch, setAssetSearch] = useState("");
   const [isDevModalOpen, setIsDevModalOpen] = useState(false);
-  const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [isTestVulnModalOpen, setIsTestVulnModalOpen] = useState(false);
   const [showAllAssets, setShowAllAssets] = useState(false);
-  const [autoScanEnabled, setAutoScanEnabled] = useState(true);
-  const [autoScanFrequency, setAutoScanFrequency] = useState("24");
+  const { schedule, isLoading: scheduleLoading, isMutating: scheduleMutating, toggle: toggleSchedule, setFrequency: setScheduleFrequency } = useSchedule(envId);
 
-  const { isScanning, progress, scanResult: contextScanResult, environmentId: scanningEnvId, configureAndStartScan: contextStartScan } = useScan();
+  const {
+    isScanning,
+    progressMessages,
+    environmentId: scanningEnvId,
+    configureAndStartScan: contextStartScan,
+  } = useScan();
+
   const isScanningThisEnv = isScanning && scanningEnvId === envId;
+
   const { user } = useUser();
 
-  const loadEnvironment = useCallback(async () => {
-    try {
-      setError(null);
-      const [envData, assetsData, overviewData] = await Promise.all([
-        getEnvironment(envId),
-        getAssets(envId),
-        getDashboardOverview(envId).catch(() => null),
-      ]);
-      setEnvironment(envData.data);
-      setAssets(assetsData.data);
-      if (overviewData?.data) setOverview(overviewData.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load environment");
-    } finally {
-      setIsLoading(false);
+  const {
+    environment_data: environment,
+    environment_error,
+    asset_data,
+    overview_data: overview,
+    isLoading,
+    refetch,
+  } = useEnvironment(envId);
+
+  const assets = asset_data ?? [];
+
+  const { data: riskMap } = useEnvironmentRiskMap(envId);
+
+  const riskSummary = useMemo(() => {
+    if (!riskMap) return null;
+
+    const entryPointCount = riskMap.entryPoints.length;
+    const highestRisk = riskMap.assetRisks.reduce((max, risk) =>
+      risk.maxCompromiseScore > (max?.score ?? 0)
+        ? { id: risk.assetId, score: risk.maxCompromiseScore }
+        : max
+    , null as { id: string; score: number } | null);
+
+    const highestRiskAsset = highestRisk
+      ? assets.find((a) => a.id === highestRisk.id)
+      : null;
+
+    return { entryPointCount, highestRisk, highestRiskAsset };
+  }, [riskMap, assets]);
+
+  const assetsWithCPEs = useMemo(() => {
+    return assets.filter((a) => Array.isArray(a.cpes) && a.cpes.length > 0).length;
+  }, [assets]);
+
+  const activeAssets = useMemo(() => {
+    return assets.filter((a) => a.status === "active").length;
+  }, [assets]);
+
+  const totalActiveThreats = useMemo(() => {
+    if (!overview) return 0;
+    const s = overview.severityCounts;
+    return s.critical + s.high + s.medium + s.low;
+  }, [overview]);
+
+  const attentionItems = () => {
+    const items: { icon: React.ElementType; text: string; cta: string; urgent: boolean }[] = [];
+
+    if (!overview?.latestScan) {
+      items.push({ icon: FiShield, text: "No security scan has been run yet", cta: "Run Scan", urgent: true });
     }
-  }, [envId]);
 
-  useEffect(() => { loadEnvironment(); }, [loadEnvironment]);
-  useEffect(() => { if (contextScanResult && scanningEnvId === envId) loadEnvironment(); }, [contextScanResult, scanningEnvId, envId, loadEnvironment]);
+    if ((overview?.overdue ?? 0) > 0) {
+      const count = overview!.overdue;
+      const plural = count > 1 ? "ies are" : "y is";
+      items.push({ icon: FiAlertOctagon, text: `${count} vulnerabilit${plural} past SLA deadline`, cta: "View overdue", urgent: true });
+    }
 
-  const assetsWithCPEs = assets.filter((a) => Array.isArray(a.cpes) && a.cpes.length > 0).length;
-  const activeAssets = assets.filter((a) => a.status === "active").length;
+    if ((overview?.unassignedCriticalHigh ?? 0) > 0) {
+      const count = overview!.unassignedCriticalHigh;
+      const plural = count > 1 ? "s" : "";
+      items.push({ icon: FiUserX, text: `${count} Critical/High vuln${plural} unassigned`, cta: "Assign", urgent: false });
+    }
 
-  const attentionItems: { icon: React.ElementType; text: string; cta: string; urgent: boolean }[] = [];
-  if (!overview?.latestScan) attentionItems.push({ icon: FiShield, text: "No security scan has been run yet", cta: "Run Scan", urgent: true });
-  if ((overview?.overdue ?? 0) > 0) attentionItems.push({ icon: FiAlertOctagon, text: `${overview!.overdue} vulnerabilit${overview!.overdue > 1 ? "ies are" : "y is"} past SLA deadline`, cta: "View overdue", urgent: true });
-  if ((overview?.unassignedCriticalHigh ?? 0) > 0) attentionItems.push({ icon: FiUserX, text: `${overview!.unassignedCriticalHigh} Critical/High vuln${overview!.unassignedCriticalHigh > 1 ? "s" : ""} unassigned`, cta: "Assign", urgent: false });
-  if (assets.length > 0 && assetsWithCPEs < assets.length) attentionItems.push({ icon: FiCpu, text: `${assets.length - assetsWithCPEs} asset${assets.length - assetsWithCPEs > 1 ? "s" : ""} missing CPE — won't be scanned`, cta: "Review", urgent: false });
+    if (assets.length > 0 && assetsWithCPEs < assets.length) {
+      const missing = assets.length - assetsWithCPEs;
+      const plural = missing > 1 ? "s" : "";
+      items.push({ icon: FiCpu, text: `${missing} asset${plural} missing CPE — won't be scanned`, cta: "Review", urgent: false });
+    }
 
-  const sortedAssets = [...assets].sort((a, b) => {
-    const aData = overview?.assetVulnMap[a.id];
-    const bData = overview?.assetVulnMap[b.id];
-    const aSev = SEVERITY_ORDER[aData?.highestSeverity ?? ""] ?? -1;
-    const bSev = SEVERITY_ORDER[bData?.highestSeverity ?? ""] ?? -1;
-    if (bSev !== aSev) return bSev - aSev;
-    return (bData?.count ?? 0) - (aData?.count ?? 0);
-  });
+    return items;
+  };
 
-  const filteredAssets = assetSearch
-    ? sortedAssets.filter(a => a.name.toLowerCase().includes(assetSearch.toLowerCase()) || a.type.toLowerCase().includes(assetSearch.toLowerCase()))
-    : sortedAssets;
+  const sortedAssets = useMemo(() => {
+    return [...assets].sort((a, b) => {
+      const aData = overview?.assetVulnMap[a.id];
+      const bData = overview?.assetVulnMap[b.id];
+      const aSev = SEVERITY_ORDER[aData?.highestSeverity ?? ""] ?? -1;
+      const bSev = SEVERITY_ORDER[bData?.highestSeverity ?? ""] ?? -1;
+      if (bSev !== aSev) return bSev - aSev;
+      return (bData?.count ?? 0) - (aData?.count ?? 0);
+    });
+  }, [assets, overview]);
+
+  const filteredAssets = useMemo(() => {
+    if (!assetSearch) return sortedAssets;
+    const q = assetSearch.toLowerCase();
+    return sortedAssets.filter(
+      (a) => a.name.toLowerCase().includes(q) || a.type.toLowerCase().includes(q)
+    );
+  }, [sortedAssets, assetSearch]);
+
+  // ── Guards ────────────────────────────────────────────────────
 
   if (isLoading) {
     return (
@@ -99,29 +159,40 @@ export default function EnvironmentDashboardPage() {
     );
   }
 
-  if (error || !environment) {
+  if (environment_error || !environment) {
     return (
       <div className="p-8 max-w-7xl mx-auto">
-        <div className="bg-error-bg border border-error-border rounded-[16px] p-6 text-center">
-          <p className="text-error-text">{error || "Environment not found"}</p>
-          <Button onClick={loadEnvironment} className="mt-4">Retry</Button>
+        <div className="bg-error-bg border border-error-border rounded-2xl p-6 text-center">
+          <p className="text-error-text">{environment_error || "Environment not found"}</p>
+          <Button onClick={() => refetch()} className="mt-4">Retry</Button>
         </div>
       </div>
     );
   }
 
-  const totalActiveThreats = overview ? overview.severityCounts.critical + overview.severityCounts.high + overview.severityCounts.medium + overview.severityCounts.low : 0;
+  const cpeCoverage = assets.length > 0 ? Math.round((assetsWithCPEs / assets.length) * 100) : 0;
+  const hasClickableCriticalHigh = overview
+    ? overview.openCriticalHigh.critical + overview.openCriticalHigh.high > 0
+    : false;
+
+  // ── Render ────────────────────────────────────────────────────
 
   return (
     <div className="p-8 h-full flex flex-col max-w-7xl mx-auto">
+
+      {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-start gap-4">
-          <div className="w-12 h-12 bg-brand-1/10 rounded-[16px] flex items-center justify-center text-brand-1">
+          <div className="w-12 h-12 bg-brand-1/10 rounded-2xl flex items-center justify-center text-brand-1">
             <FiBox className="w-6 h-6" />
           </div>
           <div className="flex-1">
-            <h1 className="text-[clamp(28px,3vw,36px)] font-bold text-text-primary tracking-[-1px] leading-[1.05]">{environment.name}</h1>
-            {environment.description && <p className="text-text-secondary text-sm mt-1">{environment.description}</p>}
+            <h1 className="text-[clamp(28px,3vw,36px)] font-bold text-text-primary tracking-[-1px] leading-[1.05]">
+              {environment.name}
+            </h1>
+            {environment.description && (
+              <p className="text-text-secondary text-sm mt-1">{environment.description}</p>
+            )}
             {environment.labels && environment.labels.length > 0 && (
               <div className="flex gap-2 mt-2">
                 {environment.labels.map((label) => (
@@ -138,6 +209,12 @@ export default function EnvironmentDashboardPage() {
               Dev
             </Button>
           )}
+          {user?.devMode && (
+            <Button variant="secondary" size="sm" onClick={() => setIsTestVulnModalOpen(true)}>
+              <FiShield className="w-4 h-4" />
+              Add Test Vuln
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={() => router.push(`/environments/${envId}/map`)}>
             <FiMap className="w-4 h-4" />
             Map View
@@ -149,115 +226,74 @@ export default function EnvironmentDashboardPage() {
         </div>
       </div>
 
-      {attentionItems.length > 0 && (
-        <div className={`rounded-[16px] border p-4 flex flex-col gap-2 mb-6 ${attentionItems.some(i => i.urgent) ? "bg-error-bg border-error-border" : "bg-warning-bg border-warning-border"}`}>
-          <p className={`text-[11px] font-semibold uppercase tracking-[0.5px] mb-1 ${attentionItems.some(i => i.urgent) ? "text-error-text" : "text-warning-text"}`}>Needs Attention</p>
-          {attentionItems.map((item, i) => (
-            <div key={i} className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <item.icon className={`w-4 h-4 shrink-0 ${item.urgent ? "text-error-text" : "text-warning-text"}`} />
-                <span className="text-sm text-text-primary">{item.text}</span>
-              </div>
-              <Button
-                size="sm"
-                variant={item.urgent ? "danger" : "secondary"}
-                onClick={() => item.cta === "Run Scan" ? contextStartScan(envId) : router.push(`/environments/${envId}/security`)}
-              >
-                {item.cta}
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
+      <AttentionBanner
+        items={attentionItems()}
+        onRunScan={() => contextStartScan(envId)}
+        onViewSecurity={() => router.push(`/environments/${envId}/security`)}
+      />
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
+
+        {/* Left column */}
         <div className="lg:col-span-2 flex flex-col gap-6 min-h-0">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Total Assets */}
-            <div className="bg-surface rounded-[16px] border border-border p-4 transition-all duration-150 hover:shadow-[var(--shadow-card)] hover:-translate-y-0.5">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-brand-1/10 flex items-center justify-center text-brand-1">
-                  <FiServer className="w-4 h-4" />
-                </div>
-                <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-text-muted">Total Assets</span>
-              </div>
-              <div className="text-[28px] font-bold text-text-primary leading-none tracking-[-1px]">{assets.length}</div>
-              <div className="text-xs text-text-muted mt-1.5">{activeAssets} active</div>
-            </div>
 
-            {/* CPE Coverage */}
-            <div className="bg-surface rounded-[16px] border border-border p-4 transition-all duration-150 hover:shadow-[var(--shadow-card)] hover:-translate-y-0.5">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-brand-1/10 flex items-center justify-center text-brand-1">
-                  <FiCpu className="w-4 h-4" />
-                </div>
-                <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-text-muted">CPE Coverage</span>
-              </div>
-              <div className="text-[28px] font-bold text-text-primary leading-none tracking-[-1px]">
-                {assets.length > 0 ? Math.round((assetsWithCPEs / assets.length) * 100) : 0}%
-              </div>
-              <div className="w-full h-1.5 bg-surface-secondary rounded-full mt-2 overflow-hidden">
-                <div
-                  className="h-full bg-brand-1 rounded-full transition-all duration-500"
-                  style={{ width: `${assets.length > 0 ? Math.round((assetsWithCPEs / assets.length) * 100) : 0}%` }}
-                />
-              </div>
-              <div className="text-xs text-text-muted mt-1.5">{assetsWithCPEs} of {assets.length}</div>
-            </div>
-
-            {/* Critical / High */}
-            <button
-              onClick={overview && overview.openCriticalHigh.critical + overview.openCriticalHigh.high > 0 ? () => router.push(`/environments/${envId}/security`) : undefined}
-              className={`bg-surface rounded-[16px] border border-border p-4 text-left transition-all duration-150 hover:shadow-[var(--shadow-card)] hover:-translate-y-0.5 ${overview && overview.openCriticalHigh.critical + overview.openCriticalHigh.high > 0 ? "cursor-pointer" : ""}`}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-error-bg flex items-center justify-center text-error-text">
-                  <FiAlertTriangle className="w-4 h-4" />
-                </div>
-                <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-text-muted">Critical / High</span>
-              </div>
-              <div className="text-[28px] font-bold text-text-primary leading-none tracking-[-1px]">
-                {overview ? `${overview.openCriticalHigh.critical} / ${overview.openCriticalHigh.high}` : "—"}
-              </div>
-              <div className="text-xs text-text-muted mt-1.5">Need immediate review</div>
-            </button>
-
-            {/* Resolved This Week */}
-            <button
+          {/* Stat cards */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <StatCard
+              icon={<FiServer className="w-4 h-4" />}
+              iconBg="bg-brand-1/10 text-brand-1"
+              label="Total Assets"
+              value={assets.length}
+              subtitle={`${activeAssets} active`}
+            />
+            <StatCard
+              icon={<FiCpu className="w-4 h-4" />}
+              iconBg="bg-brand-1/10 text-brand-1"
+              label="CPE Coverage"
+              value={`${cpeCoverage}%`}
+              progressPercent={cpeCoverage}
+              subtitle={`${assetsWithCPEs} of ${assets.length}`}
+            />
+            <StatCard
+              icon={<FiAlertTriangle className="w-4 h-4" />}
+              iconBg="bg-error-bg text-error-text"
+              label="Critical / High"
+              value={overview ? `${overview.openCriticalHigh.critical} / ${overview.openCriticalHigh.high}` : "—"}
+              subtitle="Need immediate review"
+              onClick={hasClickableCriticalHigh ? () => router.push(`/environments/${envId}/security`) : undefined}
+            />
+            <StatCard
+              icon={<FiCheckCircle className="w-4 h-4" />}
+              iconBg="bg-success-bg text-success-text"
+              label="Resolved This Week"
+              value={overview?.resolvedThisWeek ?? 0}
+              subtitle={totalActiveThreats > 0 ? `${totalActiveThreats} still open` : "All clear"}
               onClick={() => router.push(`/environments/${envId}/security`)}
-              className="bg-surface rounded-[16px] border border-border p-4 text-left transition-all duration-150 hover:shadow-[var(--shadow-card)] hover:-translate-y-0.5 cursor-pointer"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-success-bg flex items-center justify-center text-success-text">
-                  <FiCheckCircle className="w-4 h-4" />
-                </div>
-                <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-text-muted">Resolved This Week</span>
-              </div>
-              <div className="text-[28px] font-bold text-text-primary leading-none tracking-[-1px]">{overview?.resolvedThisWeek ?? 0}</div>
-              <div className="text-xs text-text-muted mt-1.5">
-                {totalActiveThreats > 0 ? `${totalActiveThreats} still open` : "All clear"}
-              </div>
-            </button>
+            />
+            <StatCard
+              icon={<FiCrosshair className="w-4 h-4" />}
+              iconBg="bg-error-bg text-error-text"
+              label="Attack Entry Points"
+              value={riskSummary?.entryPointCount ?? "—"}
+              subtitle={
+                riskSummary?.highestRiskAsset
+                  ? `${riskSummary.highestRiskAsset.name} (${Math.round(riskSummary.highestRisk?.score ?? 0)}%)`
+                  : "No risk data"
+              }
+              onClick={() => router.push(`/environments/${envId}/map`)}
+            />
           </div>
 
+          {/* All-clear banner */}
           {overview?.latestScan && totalActiveThreats === 0 && assets.length > 0 && (
-            <div className="flex items-center gap-4 bg-success-bg border border-success-border rounded-[16px] px-5 py-4">
-              <div className="w-10 h-10 rounded-full bg-success-text/20 flex items-center justify-center shrink-0">
-                <FiCheckCircle className="w-5 h-5 text-success-text" />
-              </div>
-              <div>
-                <p className="font-semibold text-success-text text-sm">Environment is secure</p>
-                <p className="text-success-text/70 text-xs mt-0.5">
-                  All detected vulnerabilities are resolved or accepted. Last scan {new Date(overview.latestScan.completedAt).toLocaleDateString()}.
-                </p>
-              </div>
-              <Button size="sm" variant="secondary" onClick={() => contextStartScan(envId)} className="ml-auto shrink-0">
-                Rescan
-              </Button>
-            </div>
+            <AllClearBanner
+              lastScanDate={overview.latestScan.completedAt}
+              onRescan={() => contextStartScan(envId)}
+            />
           )}
 
-          <div className="flex-1 bg-surface rounded-[16px] border border-border overflow-hidden flex flex-col min-h-0">
+          {/* Assets list */}
+          <div className="flex-1 bg-surface rounded-2xl border border-border overflow-hidden flex flex-col min-h-0">
             <div className="p-4 border-b border-border">
               <SectionHeader
                 title="Assets"
@@ -278,141 +314,75 @@ export default function EnvironmentDashboardPage() {
               />
             </div>
             <div className="flex-1 p-4 overflow-y-auto">
-              {filteredAssets.length === 0 ? (
-                assets.length === 0 ? (
-                  <EmptyState
-                    icon={<FiServer className="w-7 h-7" />}
-                    title="No assets yet"
-                    description="Add assets to this environment to start monitoring them."
-                    action={<Button size="sm" onClick={() => setIsAddAssetOpen(true)}><FiPlus className="w-4 h-4" /> Add Asset</Button>}
-                  />
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-text-muted text-sm">No assets match &quot;{assetSearch}&quot;</p>
-                  </div>
-                )
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {(showAllAssets ? filteredAssets : filteredAssets.slice(0, 6)).map((asset) => (
-                    <AssetCard
-                      key={asset.id}
-                      asset={asset}
-                      onClick={() => setSelectedAsset(asset)}
-                      vulnCount={overview?.assetVulnMap[asset.id]?.count}
-                      highestSeverity={overview?.assetVulnMap[asset.id]?.highestSeverity}
-                      wasScanned={overview?.latestScan !== null}
-                    />
-                  ))}
+              {filteredAssets.length === 0 && assets.length === 0 && (
+                <EmptyState
+                  icon={<FiServer className="w-7 h-7" />}
+                  title="No assets yet"
+                  description="Add assets to this environment to start monitoring them."
+                  action={
+                    <Button size="sm" onClick={() => setIsAddAssetOpen(true)}>
+                      <FiPlus className="w-4 h-4" /> Add Asset
+                    </Button>
+                  }
+                />
+              )}
+              {filteredAssets.length === 0 && assets.length > 0 && (
+                <div className="text-center py-8">
+                  <p className="text-text-muted text-sm">No assets match &quot;{assetSearch}&quot;</p>
                 </div>
               )}
-              {filteredAssets.length > 6 && (
-                <div className="mt-4 text-center">
-                  <button onClick={() => setShowAllAssets(v => !v)} className="text-sm text-brand-2 font-semibold hover:underline">
-                    {showAllAssets ? "Show less" : `View all ${filteredAssets.length} assets`}
-                  </button>
-                </div>
+              {filteredAssets.length > 0 && (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(showAllAssets ? filteredAssets : filteredAssets.slice(0, 6)).map((asset) => (
+                      <AssetCard
+                        key={asset.id}
+                        asset={asset}
+                        onClick={() => setSelectedAsset(asset)}
+                        vulnCount={overview?.assetVulnMap[asset.id]?.count}
+                        highestSeverity={overview?.assetVulnMap[asset.id]?.highestSeverity}
+                        wasScanned={overview?.latestScan !== null}
+                      />
+                    ))}
+                  </div>
+                  {filteredAssets.length > 6 && (
+                    <div className="mt-4 text-center">
+                      <button
+                        onClick={() => setShowAllAssets((v) => !v)}
+                        className="text-sm text-brand-2 font-semibold hover:underline"
+                      >
+                        {showAllAssets ? "Show less" : `View all ${filteredAssets.length} assets`}
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
         </div>
 
+        {/* Right sidebar */}
         <div className="flex flex-col gap-6 overflow-y-auto pr-1">
-          <div className={`rounded-[16px] border p-5 flex-shrink-0 transition-colors ${autoScanEnabled ? "bg-brand-1 border-brand-1" : "bg-surface border-border"}`}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className={`font-bold flex items-center gap-2 text-[16px] tracking-[-0.2px] ${autoScanEnabled ? "text-brand-2" : "text-text-primary"}`}>
-                <FiZap className={`w-4 h-4 ${autoScanEnabled ? "text-brand-2" : "text-brand-1"}`} />
-                Auto Scan
-              </h3>
-              <button
-                onClick={() => setAutoScanEnabled(v => !v)}
-                className={`relative w-11 h-6 rounded-full transition-colors ${autoScanEnabled ? "bg-brand-2/30" : "bg-surface-secondary border border-border"}`}
-                aria-label="Toggle auto scan"
-              >
-                <span className={`absolute top-0.5 w-5 h-5 rounded-full shadow-sm transition-transform ${autoScanEnabled ? "bg-brand-2 -translate-x-5" : "bg-text-muted -translate-x-0.5"}`} />
-              </button>
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className={autoScanEnabled ? "text-brand-2/80" : "text-text-muted"}>Status</span>
-                <span className={`font-medium ${autoScanEnabled ? "text-brand-2" : "text-text-primary"}`}>{autoScanEnabled ? "Active" : "Paused"}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className={`shrink-0 ${autoScanEnabled ? "text-brand-2/80" : "text-text-muted"}`}>Frequency</span>
-                <select
-                  value={autoScanFrequency}
-                  onChange={(e) => setAutoScanFrequency(e.target.value)}
-                  className={`min-w-[6rem] px-2 py-1 rounded-[8px] text-[13px] font-medium focus:outline-none focus:ring-2 appearance-none text-right ${autoScanEnabled ? "bg-brand-2/10 border border-brand-2/20 text-brand-2 focus:ring-brand-2/30" : "bg-background-secondary border border-border text-text-primary focus:ring-brand-1/20"}`}
-                >
-                  <option value="6">Every 6h</option>
-                  <option value="12">Every 12h</option>
-                  <option value="24">Every 24h</option>
-                  <option value="48">Every 48h</option>
-                  <option value="168">Every 7d</option>
-                </select>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className={autoScanEnabled ? "text-brand-2/80" : "text-text-muted"}>Next run</span>
-                <span className={`font-medium ${autoScanEnabled ? "text-brand-2" : "text-text-primary"}`}>{autoScanEnabled ? `in ${Math.max(1, parseInt(autoScanFrequency, 10) - 8)}h` : "Paused"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className={autoScanEnabled ? "text-brand-2/80" : "text-text-muted"}>Scope</span>
-                <span className={`font-medium ${autoScanEnabled ? "text-brand-2" : "text-text-primary"}`}>All assets</span>
-              </div>
-            </div>
-          </div>
+          <AutoScanCard
+            schedule={schedule}
+            isLoading={scheduleLoading}
+            isMutating={scheduleMutating}
+            onToggle={toggleSchedule}
+            onFrequencyChange={setScheduleFrequency}
+          />
 
-          <div className="bg-surface rounded-[16px] border border-border p-5 flex-shrink-0">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-text-primary flex items-center gap-2 text-[18px] tracking-[-0.2px]">
-                <FiShield className="w-5 h-5 text-brand-1" />
-                Security Status
-              </h3>
-              <div className="flex items-center gap-2">
-                {(overview?.overdue ?? 0) > 0 && <Badge variant="error" size="sm">{overview!.overdue} overdue</Badge>}
-                {isScanningThisEnv && <Badge variant="accent" size="sm">Scanning...</Badge>}
-              </div>
-            </div>
+          <SecurityStatusCard
+            overview={overview}
+            isScanningThisEnv={isScanningThisEnv}
+            progressMessages={progressMessages}
+            totalActiveThreats={totalActiveThreats}
+            onViewSecurity={() => router.push(`/environments/${envId}/security`)}
+            onRescan={() => contextStartScan(envId)}
+          />
 
-            {isScanningThisEnv ? (
-              <div className="text-center py-4">
-                <div className="w-8 h-8 border-2 border-brand-1 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                <p className="text-sm text-text-secondary">{progress}</p>
-              </div>
-            ) : overview?.latestScan ? (
-              <div className="space-y-4">
-                <RiskSentence stats={overview.severityCounts} />
-                {totalActiveThreats > 0 ? (
-                  <VulnBarChart critical={overview.severityCounts.critical} high={overview.severityCounts.high} medium={overview.severityCounts.medium} low={overview.severityCounts.low} />
-                ) : (
-                  <div className="flex items-center gap-2 text-success-text bg-success-bg rounded-[10px] p-3 border border-success-border">
-                    <FiCheckCircle className="w-5 h-5" />
-                    <span className="text-sm font-medium">No vulnerabilities detected</span>
-                  </div>
-                )}
-                <div className="text-xs text-text-muted">
-                  Last scan: {new Date(overview.latestScan.completedAt).toLocaleDateString()}
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <Button variant="secondary" size="sm" onClick={() => router.push(`/environments/${envId}/security`)} className="flex-1">
-                    View Details <FiChevronRight className="w-3 h-3" />
-                  </Button>
-                  <Button size="sm" onClick={() => contextStartScan(envId)} disabled={isScanningThisEnv} className="flex-1">
-                    <FiPlay className="w-3 h-3" /> Rescan
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-4">
-                <FiShield className="w-12 h-12 text-text-muted mx-auto mb-3" />
-                <p className="text-sm text-text-secondary mb-3">No security scan yet</p>
-                <Button size="sm" onClick={() => contextStartScan(envId)}>
-                  <FiZap className="w-4 h-4" /> Run First Scan
-                </Button>
-              </div>
-            )}
-          </div>
+          <AttackExposureCard riskSummary={riskSummary} envId={envId} />
 
-          <div className="bg-surface rounded-[16px] border border-border p-5 flex-shrink-0">
+          <div className="bg-surface rounded-2xl border border-border p-5 shrink-0">
             <h3 className="font-bold text-text-primary mb-4 flex items-center gap-2 text-[18px] tracking-[-0.2px]">
               <FiBarChart2 className="w-5 h-5 text-brand-1" />
               Asset Types
@@ -421,79 +391,39 @@ export default function EnvironmentDashboardPage() {
           </div>
 
           {overview?.latestScan && (
-            <div className="bg-surface rounded-[16px] border border-border p-5 flex-shrink-0">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-text-primary flex items-center gap-2 text-[16px] tracking-[-0.2px]">
-                  <FiList className="w-4 h-4 text-brand-1" />
-                  Latest Scan Breakdown
-                </h3>
-              </div>
-              <div className="space-y-3">
-                {(() => {
-                  const breakdown = overview.latestScan.activeBreakdown;
-                  const total = breakdown.open + breakdown.inProgress + breakdown.resolved || 1;
-                  return [
-                    { label: "Open", value: breakdown.open, bar: "bg-error-text", text: "text-error-text" },
-                    { label: "In Progress", value: breakdown.inProgress, bar: "bg-warning-text", text: "text-warning-text" },
-                    { label: "Resolved", value: breakdown.resolved, bar: "bg-success-text", text: "text-success-text" },
-                  ].map(({ label, value, bar, text }) => {
-                    const pct = (value / total) * 100;
-                    return (
-                      <div key={label}>
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="text-text-muted">{label}</span>
-                          <span className={`font-semibold ${text}`}>{value}</span>
-                        </div>
-                        <div className="h-1.5 bg-surface-secondary rounded-full overflow-hidden">
-                          <div className={`h-full ${bar} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-              <button onClick={() => router.push(`/environments/${envId}/security`)} className="w-full mt-4 text-xs text-brand-2 font-semibold hover:underline flex items-center justify-center gap-1">
-                Manage workflows <FiChevronRight className="w-3 h-3" />
-              </button>
-            </div>
+            <ScanBreakdownCard
+              breakdown={overview.latestScan.activeBreakdown}
+              onManageWorkflows={() => router.push(`/environments/${envId}/security`)}
+            />
           )}
 
-          {overview && overview.recentScans.length > 0 && (
-            <div className="bg-surface rounded-[16px] border border-border p-5 flex-shrink-0">
-              <h3 className="font-bold text-text-primary mb-4 flex items-center gap-2 text-[18px] tracking-[-0.2px]">
-                <FiClock className="w-5 h-5 text-brand-1" />
-                Recent Scans
-              </h3>
-              <div className="space-y-3">
-                {overview.recentScans.map((scan) => (
-                  <div key={scan.id} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      {scan.status === "COMPLETED" ? (
-                        <FiCheckCircle className="w-4 h-4 text-success-text shrink-0" />
-                      ) : (
-                        <FiXCircle className="w-4 h-4 text-error-text shrink-0" />
-                      )}
-                      <span className="text-text-secondary">{new Date(scan.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
-                    </div>
-                    <span className={`text-xs font-medium ${scan.status === "COMPLETED" ? "text-success-text" : "text-error-text"}`}>
-                      {scan.status === "COMPLETED" ? "Completed" : "Failed"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {overview.recentScans.length >= 3 && (
-                <button onClick={() => router.push(`/environments/${envId}/security`)} className="w-full mt-3 text-xs text-brand-2 font-semibold hover:underline">
-                  View all scan history
-                </button>
-              )}
-            </div>
-          )}
+          <RecentScansCard
+            scans={overview?.recentScans ?? []}
+            onViewAll={() => router.push(`/environments/${envId}/security`)}
+          />
         </div>
       </div>
 
-      <AddAssetSlideOver isOpen={isAddAssetOpen} onClose={() => setIsAddAssetOpen(false)} onSuccess={loadEnvironment} environmentId={envId} />
-      <AssetDetailsSlideOver asset={selectedAsset} isOpen={selectedAsset !== null} onClose={() => setSelectedAsset(null)} onAssetDeleted={(deletedAssetId) => { setAssets((prev) => prev.filter((a) => a.id !== deletedAssetId)); setSelectedAsset(null); }} />
+      <AddAssetSlideOver
+        isOpen={isAddAssetOpen}
+        onClose={() => setIsAddAssetOpen(false)}
+        onSuccess={() => refetch()}
+        environmentId={envId}
+      />
+      <AssetDetailsSlideOver
+        asset={selectedAsset}
+        isOpen={selectedAsset !== null}
+        onClose={() => setSelectedAsset(null)}
+        onAssetDeleted={() => { setSelectedAsset(null); refetch(); }}
+      />
       <DevModeModal isOpen={isDevModalOpen} onClose={() => setIsDevModalOpen(false)} />
+      <AddTestVulnerabilityModal
+        isOpen={isTestVulnModalOpen}
+        onClose={() => setIsTestVulnModalOpen(false)}
+        environmentId={envId}
+        assets={assets}
+        onCreated={() => refetch()}
+      />
     </div>
   );
 }

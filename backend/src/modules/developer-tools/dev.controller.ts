@@ -8,6 +8,8 @@ import {
 } from "../scan-mock/public";
 import type { PublicUser } from "../../types/express";
 import { ok, err } from "../../lib/response-helpers";
+import { VulnSeverity, ScanStatus } from "@prisma/client";
+import { listSeedTemplates, seedEnvironment } from "./seed.service";
 
 /**
  * Generate mock vulnerabilities using LLM
@@ -165,20 +167,7 @@ export async function getMockVulnerabilityStatsHandler(
       },
     });
 
-    const totalCount = await prisma.vulnerability.count({
-      where: {
-        isMock: true,
-        assetVulnerabilities: {
-          some: {
-            assetScan: {
-              scan: {
-                environmentId,
-              },
-            },
-          },
-        },
-      },
-    });
+    const totalCount = stats.reduce((sum, s) => sum + s._count.id, 0);
 
     res.json(
       ok({ total: totalCount, bySeverity: stats })
@@ -186,5 +175,196 @@ export async function getMockVulnerabilityStatsHandler(
   } catch (error: any) {
     console.error("[GetMockVulnerabilityStats] Error:", error);
     res.status(500).json(err("FETCH_FAILED", error.message || "Failed to fetch stats"));
+  }
+}
+
+/**
+ * Create a single test vulnerability manually
+ * POST /dev/create-test-vulnerability
+ */
+export async function createTestVulnerabilityHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const {
+      environmentId,
+      assetId,
+      cveId,
+      cvssScore,
+      cvssVector,
+      epssPercentile,
+      description,
+      severity,
+    } = req.body;
+    const user = req.user as PublicUser;
+
+    // Check dev mode
+    const userAccount = await prisma.userAccount.findUnique({
+      where: { id: user.id },
+    });
+    if (!userAccount?.devMode) {
+      res.status(403).json(
+        err("DEV_MODE_REQUIRED", "Dev mode must be enabled to create test vulnerabilities")
+      );
+      return;
+    }
+
+    if (!(await verifyEnvironment(user.id, environmentId))) {
+      res.status(404).json(err("NOT_FOUND", "Environment not found"));
+      return;
+    }
+
+    // Validate asset exists in this environment
+    const asset = await prisma.asset.findFirst({
+      where: { id: assetId, environmentId },
+    });
+    if (!asset) {
+      res.status(404).json(err("NOT_FOUND", "Asset not found in environment"));
+      return;
+    }
+
+    // Validate required fields
+    if (!cveId || typeof cveId !== "string") {
+      res.status(400).json(err("INVALID_INPUT", "cveId is required"));
+      return;
+    }
+
+    // Check for duplicate CVE ID
+    const existing = await prisma.vulnerability.findUnique({
+      where: { cveId },
+    });
+    if (existing) {
+      res.status(409).json(err("DUPLICATE_CVE", `CVE ${cveId} already exists`));
+      return;
+    }
+
+    // Create vulnerability
+    const vuln = await prisma.vulnerability.create({
+      data: {
+        cveId,
+        description: description || `Test vulnerability ${cveId}`,
+        cvssScore: typeof cvssScore === "number" ? cvssScore : null,
+        cvssVector: cvssVector || null,
+        epssPercentile: typeof epssPercentile === "number" ? epssPercentile : null,
+        severity: severity || "CRITICAL",
+        isMock: true,
+        createdBy: user.id,
+      },
+    });
+
+    // Create workflow linking asset to vulnerability
+    const workflow = await prisma.vulnerabilityWorkflow.create({
+      data: {
+        environmentId,
+        assetId,
+        vulnerabilityId: vuln.id,
+        cpeName: "cpe:2.3:a:test:test:1.0",
+        status: "OPEN",
+      },
+    });
+
+    // ─── Create mock scan + asset scan + asset vulnerability ───────────────
+    // This integrates the test vuln with the dashboard, asset vuln map,
+    // and overview statistics (same chain as scanned vulnerabilities).
+
+    const scan = await prisma.securityScan.create({
+      data: {
+        environmentId,
+        status: ScanStatus.COMPLETED,
+        isMock: true,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        totalAssets: 1,
+        scannedAssets: 1,
+        vulnerabilitiesFound: 1,
+        criticalCount: severity === "CRITICAL" ? 1 : 0,
+        highCount: severity === "HIGH" ? 1 : 0,
+        mediumCount: severity === "MEDIUM" ? 1 : 0,
+        lowCount: severity === "LOW" ? 1 : 0,
+      },
+    });
+
+    const assetScan = await prisma.assetScan.create({
+      data: {
+        scanId: scan.id,
+        assetId,
+        scannedAt: new Date(),
+      },
+    });
+
+    await prisma.assetVulnerability.create({
+      data: {
+        assetScanId: assetScan.id,
+        vulnerabilityId: vuln.id,
+        cpeName: "cpe:2.3:a:test:test:1.0",
+      },
+    });
+
+    res.status(201).json(
+      ok({ vulnerability: vuln, workflow, scanId: scan.id }, "Test vulnerability created")
+    );
+  } catch (error: any) {
+    console.error("[CreateTestVulnerability] Error:", error);
+    res.status(500).json(
+      err("CREATE_FAILED", error.message || "Failed to create test vulnerability")
+    );
+  }
+}
+
+/**
+ * GET /dev/seed-templates
+ * Returns the list of available demo environment templates.
+ */
+export async function getSeedTemplatesHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  res.json(ok(listSeedTemplates(), "Seed templates loaded"));
+}
+
+/**
+ * POST /dev/seed-template
+ * Seeds a full demo environment from a template.
+ * Body: { templateId: string }
+ */
+export async function seedTemplateHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { templateId } = req.body;
+    const user = req.user as PublicUser;
+
+    if (!templateId || typeof templateId !== "string") {
+      res.status(400).json(err("INVALID_INPUT", "templateId is required"));
+      return;
+    }
+
+    const userAccount = await prisma.userAccount.findUnique({
+      where: { id: user.id },
+    });
+
+    if (!userAccount?.devMode) {
+      res.status(403).json(
+        err("DEV_MODE_REQUIRED", "Dev mode must be enabled to seed demo environments")
+      );
+      return;
+    }
+
+    const result = await seedEnvironment(user.id, templateId);
+
+    res.status(201).json(
+      ok(result, `Demo environment "${result.environmentName}" seeded successfully`)
+    );
+  } catch (error: any) {
+    console.error("[SeedTemplate] Error:", error);
+    if (error.message?.startsWith("Unknown template")) {
+      res.status(400).json(err("INVALID_INPUT", error.message));
+      return;
+    }
+    res.status(500).json(
+      err("SEED_FAILED", error.message || "Failed to seed demo environment")
+    );
   }
 }

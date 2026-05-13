@@ -3,7 +3,9 @@ import { getLatestScan } from "../scan-core/public";
 import { verifyEnvironment } from "../../lib/verify-environment";
 import { explainCve } from "../vulnerability-workflows/public";
 import { analyzeSocContext } from "./soc-analysis.service";
-import { analyzeEnvironment, type AssetScanEntry } from "../environment-briefing/public";
+import { analyzeEnvironment, buildVulnerabilityMatrix, type AssetScanEntry } from "../environment-briefing/public";
+import { chatWithEnvironmentContext, type ChatMessage } from "./chat.service";
+import { defaultModel } from "../../lib/gemini";
 import type { SocAnalysisInput } from "./soc-analysis.types";
 import { ok, err } from "../../lib/response-helpers";
 
@@ -122,5 +124,60 @@ export async function environmentBriefingHandler(req: Request, res: Response): P
 	} catch (error) {
 		console.error("[AI] environmentBriefing error:", error);
 		res.status(500).json(err("GENERATION_FAILED", "Failed to generate environment briefing."));
+	}
+}
+
+/**
+ * POST /ai/chat
+ * Multi-turn chat with full environment context as system prompt.
+ * Auth required — fetches scan data from DB. History capped at 6 messages server-side.
+ */
+export async function chatHandler(req: Request, res: Response): Promise<void> {
+	const userId = req.user?.id;
+	const { environmentId, messages } = req.body;
+
+	if (!environmentId || typeof environmentId !== "string") {
+		res.status(400).json(err("INVALID_INPUT", "environmentId is required"));
+		return;
+	}
+	if (!Array.isArray(messages) || messages.length === 0) {
+		res.status(400).json(err("INVALID_INPUT", "messages array is required"));
+		return;
+	}
+
+	try {
+		if (!(await verifyEnvironment(userId!, environmentId))) {
+			res.status(404).json(err("NOT_FOUND", "Environment not found"));
+			return;
+		}
+
+		const latestScan = await getLatestScan(environmentId);
+		if (!latestScan) {
+			res.status(404).json(err("NOT_FOUND", "No completed scan found. Run a scan first."));
+			return;
+		}
+
+		const assetScans: AssetScanEntry[] = latestScan.assetScans.map((assetScan) => ({
+			asset: {
+				name: assetScan.asset.name,
+				type: assetScan.asset.type,
+				domain: assetScan.asset.domain,
+			},
+			vulnerabilities: assetScan.vulnerabilities.map((av) => ({
+				vulnerability: {
+					cveId: av.vulnerability.cveId,
+					description: av.vulnerability.description,
+					severity: av.vulnerability.severity,
+					cvssScore: av.vulnerability.cvssScore,
+				},
+			})),
+		}));
+
+		const matrix = buildVulnerabilityMatrix(assetScans);
+		const reply = await chatWithEnvironmentContext(matrix, messages as ChatMessage[]);
+		res.json(ok({ reply, model: defaultModel }));
+	} catch (error) {
+		console.error("[AI] chat error:", error);
+		res.status(500).json(err("GENERATION_FAILED", "Failed to generate response."));
 	}
 }

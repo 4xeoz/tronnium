@@ -81,6 +81,7 @@ model Environment {
   assets          Asset[]
   SecurityScans    SecurityScan[]
   vulnerabilityWorkflows VulnerabilityWorkflow[]
+  scanSchedule     ScanSchedule?
 
   @@index([ownerId])
   relationships Relationship[]
@@ -119,6 +120,9 @@ model Asset {
   manufacturer  String?     // Manufacturer/vendor name
   model         String?     // Model name or number
   serialNumber  String?     // Serial number or asset tag
+
+  // External exposure
+  isExternallyFacing Boolean @default(false) // Whether the asset is exposed to the public internet
 
   // CPEs selected by user with full metadata (score, breakdown, cpeNameId)
   // Related AssetCpe records with deconstruction and ranking metadata
@@ -184,7 +188,8 @@ model Relationship {
 
   type          RelationType   
 
-  criticality   RelationshipCriticality @default(MEDIUM)
+  operationalCriticality   RelationshipCriticality @default(MEDIUM)
+  securityCriticality RelationshipCriticality @default(LOW)
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -202,11 +207,12 @@ model Relationship {
 
 
 enum RelationType {
-  DEPENDS_ON
-  CONTROLS
-  PROVIDES_SERVICE
-  SHARES_DATA_WITH
-  
+  NETWORK_CONNECTS_TO
+  MANAGED_BY
+  AUTHENTICATES_VIA
+  EXECUTES_CODE_FROM
+  RECEIVES_DATA_FROM
+  SHARES_CREDENTIALS_WITH
 }
 
 
@@ -384,4 +390,31 @@ model VulnerabilityWorkflow {
   @@index([assetId])
   @@index([assigneeId])
   @@index([status])
+}
+
+enum ScheduleFrequency {
+  MINUTELY
+  HOURLY
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model ScanSchedule {
+  id            String            @id @default(uuid()) @db.Uuid
+  environmentId String            @unique @db.Uuid
+  environment   Environment       @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  frequency     ScheduleFrequency
+  hour          Int               // 0-23
+  minute        Int               @default(0)
+  dayOfWeek     Int?              // 0-6, WEEKLY only
+  dayOfMonth    Int?              // 1-31, MONTHLY only
+  fromDate      String?           // "last-scan" | ISO date | null = all CVEs
+  isActive      Boolean           @default(true)
+  lastRunAt     DateTime?
+  nextRunAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([isActive])
 }

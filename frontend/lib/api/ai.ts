@@ -1,13 +1,12 @@
 /**
- * AI API - AI-powered features for security analysis
+ * AI API - AI-powered security analysis
+ * Each function returns exactly what the backend sends, unwrapped.
  */
 
 import { apiFetch, ApiResponse } from "./client";
-import { ScanSeverity } from "./scans";
+import type { ScanSeverity } from "./scans";
 
-// ============================================================
-// Existing — Generic CVE Explanation
-// ============================================================
+// ─── Types ───────────────────────────────────────────────────
 
 export type CveExplanation = {
   summary: string;
@@ -23,18 +22,14 @@ export type ExplainCveRequest = {
   severity: ScanSeverity;
 };
 
-export async function explainCve(
-  request: ExplainCveRequest
-): Promise<ApiResponse<CveExplanation>> {
-  return apiFetch<CveExplanation>("/ai/explain-cve", {
-    method: "POST",
-    body: JSON.stringify(request),
-  });
-}
-
-// ============================================================
-// Tier 1 — Per-CVE SOC Analysis
-// ============================================================
+export type SocAnalysis = {
+  systemImpact: string;
+  attackScenario: string;
+  remediationSteps: string[];
+  industryGuidance: string;
+  urgencyLevel: "IMMEDIATE" | "HIGH" | "MEDIUM" | "LOW";
+  model: string;
+};
 
 export type SocAnalysisRequest = {
   cveId: string;
@@ -46,28 +41,6 @@ export type SocAnalysisRequest = {
   assetType: string;
   cpeName: string;
 };
-
-export type SocAnalysis = {
-  systemImpact: string;
-  attackScenario: string;
-  remediationSteps: string[];
-  industryGuidance: string;
-  urgencyLevel: "IMMEDIATE" | "HIGH" | "MEDIUM" | "LOW";
-  model: string;
-};
-
-export async function requestSocAnalysis(
-  request: SocAnalysisRequest
-): Promise<ApiResponse<SocAnalysis>> {
-  return apiFetch<SocAnalysis>("/ai/soc-analysis", {
-    method: "POST",
-    body: JSON.stringify(request),
-  });
-}
-
-// ============================================================
-// Tier 2 — Full Environment AI Briefing
-// ============================================================
 
 export type CriticalFinding = {
   title: string;
@@ -87,11 +60,37 @@ export type EnvironmentBriefing = {
   model: string;
 };
 
-export async function requestEnvironmentBriefing(
-  environmentId: string
-): Promise<ApiResponse<EnvironmentBriefing>> {
+// ─── Fetch Functions ─────────────────────────────────────────
+
+export async function fetchCveExplanation(request: ExplainCveRequest): Promise<ApiResponse<CveExplanation>> {
+  return apiFetch<CveExplanation>("/ai/explain-cve", {
+    method: "POST",
+    body: JSON.stringify(request),
+  });
+}
+
+export async function fetchSocAnalysis(request: SocAnalysisRequest): Promise<ApiResponse<SocAnalysis>> {
+  return apiFetch<SocAnalysis>("/ai/soc-analysis", {
+    method: "POST",
+    body: JSON.stringify(request),
+  });
+}
+
+export async function fetchEnvironmentBriefing(environmentId: string): Promise<ApiResponse<EnvironmentBriefing>> {
   return apiFetch<EnvironmentBriefing>("/ai/environment-briefing", {
     method: "POST",
     body: JSON.stringify({ environmentId }),
+  });
+}
+
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+
+export async function fetchChatReply(
+  environmentId: string,
+  messages: ChatMessage[]
+): Promise<ApiResponse<{ reply: string; model: string }>> {
+  return apiFetch<{ reply: string; model: string }>("/ai/chat", {
+    method: "POST",
+    body: JSON.stringify({ environmentId, messages }),
   });
 }

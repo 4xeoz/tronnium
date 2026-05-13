@@ -6,6 +6,9 @@ import {
   createRelationshipHandler,
   updateRelationshipHandler,
   deleteRelationshipHandler,
+  getBlastRadiusHandler,
+  getSingleAssetBlastRadiusHandler,
+  getEntryPointsHandler,
 } from "./relationship.controller";
 
 export const relationshipRouter = Router();
@@ -39,4 +42,28 @@ relationshipRouter.delete(
   jwtAuthGuard(),
   logRequest(),
   deleteRelationshipHandler
+);
+
+/**
+ * Blast radius & entry point endpoints
+ */
+relationshipRouter.get(
+  "/:environmentId/blast-radius",
+  jwtAuthGuard(),
+  logRequest(),
+  getBlastRadiusHandler
+);
+
+relationshipRouter.get(
+  "/:environmentId/blast-radius/:assetId",
+  jwtAuthGuard(),
+  logRequest(),
+  getSingleAssetBlastRadiusHandler
+);
+
+relationshipRouter.get(
+  "/:environmentId/entry-points",
+  jwtAuthGuard(),
+  logRequest(),
+  getEntryPointsHandler
 );

@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useState } from "react";
 import {
   FiCheckCircle,
@@ -12,9 +13,10 @@ import {
   FiLayers,
   FiFileText,
 } from "react-icons/fi";
-import { getStatusLabel, VULN_STATUSES, type VulnStatus } from "@/lib/api/vulnerabilityWorkflow";
+import { VULN_STATUSES, type VulnStatus } from "@/lib/api/vulnerabilityWorkflow";
 import { Badge, AgeBadge } from "./SecurityUI";
 import { STATUS_COLORS, getInitials } from "@/lib/securityConstants";
+import { getStatusLabel } from "@/lib/formatters";
 import type { ScanSeverity } from "@/lib/api";
 
 // ============================================

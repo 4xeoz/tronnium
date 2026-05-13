@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { getCurrentUser, apiFetch, type User } from './api';
+import { fetchCurrentUser, apiFetch, type User } from './api';
 
 interface UserContextType {
   user: User | null;
@@ -26,7 +26,7 @@ export function UserProvider({
   const refetchUser = async () => {
     setLoading(true);
     try {
-      const response = await getCurrentUser();
+      const response = await fetchCurrentUser();
       setUser(response.data);
     } catch (error) {
       console.error('Failed to fetch user:', error);
@@ -55,7 +55,7 @@ export function UserProvider({
         credentials: 'include',
       });
       const result = await response.json();
-      if (result.success) {
+      if (result) {
         setUser(null);
         window.location.href = '/';
       }

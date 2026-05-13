@@ -13,8 +13,12 @@ import {
   FiTrash2,
   FiMoreHorizontal,
   FiEye,
+  FiZap,
+  FiCheckCircle,
+  FiServer,
+  FiCpu,
 } from "react-icons/fi";
-import { getEnvironments, deleteEnvironment, type Environment } from "@/lib/api";
+import { fetchEnvironments, deleteEnvironment, type Environment } from "@/lib/api";
 import CreateEnvironmentSlideOver from "@/components/environments/CreateEnvironmentSlideOver";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -22,6 +26,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
+import { fetchSeedTemplates, seedTemplate, type SeedTemplate } from "@/lib/api/dev";
 
 function StatsRow({ environments }: { environments: Environment[] }) {
   const totalAssets = environments.reduce((acc, env) => acc + (env.assetCount ?? 0), 0);
@@ -172,6 +177,288 @@ function EnvironmentRow({
   );
 }
 
+// ── Per-template visual config ────────────────────────────────────────────────
+
+const TEMPLATE_CONFIG: Record<string, {
+  icon: React.ElementType;
+  domain: string;
+  iconBg: string;
+  iconColor: string;
+  badgeVariant: "info" | "warning" | "error";
+}> = {
+  "enterprise-it":       { icon: FiServer, domain: "IT", iconBg: "bg-info-bg",    iconColor: "text-info-text",    badgeVariant: "info"    },
+  "cloud-microservices": { icon: FiLayers, domain: "IT", iconBg: "bg-accent-bg",  iconColor: "text-accent-text",  badgeVariant: "info"    },
+  "zero-trust-failure":  { icon: FiShield, domain: "IT", iconBg: "bg-error-bg",    iconColor: "text-error-text",    badgeVariant: "error"   },
+  "ot-power-grid":       { icon: FiZap,    domain: "OT", iconBg: "bg-warning-bg",  iconColor: "text-warning-text",  badgeVariant: "warning" },
+  "ot-manufacturing":    { icon: FiCpu,    domain: "OT", iconBg: "bg-warning-bg",  iconColor: "text-warning-text",  badgeVariant: "warning" },
+};
+
+type SeedResultEntry = {
+  environmentId: string;
+  environmentName: string;
+  summary: { assets: number; vulnerabilities: number; relationships: number };
+};
+
+function TemplateCard({
+  template,
+  onSeed,
+  isSeeding,
+  anySeeding,
+  result,
+  onNavigate,
+  onSeedAgain,
+}: {
+  template: SeedTemplate;
+  onSeed: () => void;
+  isSeeding: boolean;
+  anySeeding: boolean;
+  result: SeedResultEntry | null;
+  onNavigate: (envId: string, path: string) => void;
+  onSeedAgain: () => void;
+}) {
+  const cfg = TEMPLATE_CONFIG[template.id] ?? {
+    icon: FiBox,
+    domain: "IT",
+    iconBg: "bg-surface-secondary",
+    iconColor: "text-text-muted",
+    badgeVariant: "neutral" as const,
+  };
+  const Icon = cfg.icon;
+
+  // ── Success state ──────────────────────────────────────────────────────────
+  if (result) {
+    return (
+      <div className="bg-surface rounded-[16px] border border-border p-4 transition-all hover:shadow-[var(--shadow-card)] hover:-translate-y-0.5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-success-bg`}>
+            <FiCheckCircle className="w-5 h-5 text-success-text" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-text-primary truncate">{result.environmentName}</p>
+            <p className="text-[11px] text-success-text font-medium">Ready</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 mb-4">
+          <div className="text-center flex-1">
+            <div className="text-lg font-bold text-text-primary tabular-nums">{result.summary.assets}</div>
+            <div className="text-[10px] text-text-muted">Assets</div>
+          </div>
+          <div className="w-px h-8 bg-border" />
+          <div className="text-center flex-1">
+            <div className="text-lg font-bold text-text-primary tabular-nums">{result.summary.vulnerabilities}</div>
+            <div className="text-[10px] text-text-muted">Vulns</div>
+          </div>
+          <div className="w-px h-8 bg-border" />
+          <div className="text-center flex-1">
+            <div className="text-lg font-bold text-text-primary tabular-nums">{result.summary.relationships}</div>
+            <div className="text-[10px] text-text-muted">Edges</div>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            onClick={() => onNavigate(result.environmentId, "map")}
+            className="flex-1"
+          >
+            <FiActivity className="w-3.5 h-3.5" />
+            Map
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => onNavigate(result.environmentId, "dashboard")}
+            className="flex-1"
+          >
+            <FiShield className="w-3.5 h-3.5" />
+            Dashboard
+          </Button>
+        </div>
+
+        <button
+          onClick={onSeedAgain}
+          className="w-full mt-3 text-[11px] text-text-muted hover:text-text-primary transition-colors"
+        >
+          Seed another copy
+        </button>
+      </div>
+    );
+  }
+
+  // ── Seeding state ──────────────────────────────────────────────────────────
+  if (isSeeding) {
+    return (
+      <div className="bg-surface rounded-[16px] border border-border p-4">
+        <div className="flex flex-col items-center justify-center py-8 gap-4">
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${cfg.iconBg}`}>
+            <Icon className={`w-5 h-5 ${cfg.iconColor}`} />
+          </div>
+          <div className="text-center space-y-1">
+            <p className="text-sm font-medium text-text-primary">Creating {template.name}...</p>
+            <p className="text-xs text-text-muted">
+              {template.stats.assets} assets · {template.stats.vulnerabilities} vulns · {template.stats.relationships} edges
+            </p>
+          </div>
+          <div className="w-24 h-1 bg-background-secondary rounded-full overflow-hidden">
+            <div className="h-full bg-brand-1 rounded-full animate-pulse" style={{ width: "60%" }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Default state ──────────────────────────────────────────────────────────
+  return (
+    <div className="bg-surface rounded-[16px] border border-border p-4 transition-all hover:shadow-[var(--shadow-card)] hover:-translate-y-0.5 flex flex-col">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${cfg.iconBg}`}>
+            <Icon className={`w-5 h-5 ${cfg.iconColor}`} />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-text-primary">{template.name}</h3>
+            <Badge variant={cfg.badgeVariant} size="sm">{cfg.domain}</Badge>
+          </div>
+        </div>
+      </div>
+
+      {/* Description */}
+      <p className="text-xs text-text-muted leading-relaxed mb-3">{template.description}</p>
+
+      {/* Scenario */}
+      <div className="bg-background-secondary rounded-lg p-3 mb-3 space-y-2">
+        {template.longDescription.split("\n\n").map((paragraph, idx) => {
+          const [label, ...rest] = paragraph.split(":");
+          const isLabel = rest.length > 0 && (label === "The Problem" || label === "What Happened" || label === "What You'll Discover");
+          return (
+            <p key={idx} className="text-[11px] text-text-secondary leading-relaxed">
+              {isLabel ? (
+                <>
+                  <span className="font-semibold text-text-primary">{label}:</span>
+                  {rest.join(":")}
+                </>
+              ) : (
+                paragraph
+              )}
+            </p>
+          );
+        })}
+      </div>
+
+      {/* Tags */}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {template.tags.map((tag) => (
+          <Badge key={tag} variant="neutral" size="sm">{tag}</Badge>
+        ))}
+      </div>
+
+      {/* Stats */}
+      <div className="flex items-center gap-4 text-xs text-text-muted mb-4">
+        <span><strong className="text-text-primary">{template.stats.assets}</strong> assets</span>
+        <span><strong className="text-text-primary">{template.stats.vulnerabilities}</strong> vulns</span>
+        <span><strong className="text-text-primary">{template.stats.relationships}</strong> edges</span>
+      </div>
+
+      {/* CTA */}
+      <div className="mt-auto">
+        <Button
+          size="sm"
+          onClick={onSeed}
+          disabled={anySeeding}
+          isLoading={anySeeding}
+          className="w-full"
+        >
+          <FiPlus className="w-3.5 h-3.5" />
+          Seed Environment
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function DemoTemplatesSection({ onSeeded }: { onSeeded: () => void }) {
+  const router = useRouter();
+  const [templates, setTemplates] = useState<SeedTemplate[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [seedingId, setSeedingId] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, SeedResultEntry>>({});
+
+  useEffect(() => {
+    fetchSeedTemplates().then((res) => {
+      if (res.data) setTemplates(res.data);
+      setIsLoading(false);
+    });
+  }, []);
+
+  const handleSeed = async (templateId: string) => {
+    setSeedingId(templateId);
+    try {
+      const res = await seedTemplate(templateId);
+      if (res.data) {
+        setResults((prev) => ({
+          ...prev,
+          [templateId]: {
+            environmentId: res.data!.environmentId,
+            environmentName: res.data!.environmentName,
+            summary: res.data!.summary,
+          },
+        }));
+        onSeeded();
+      }
+    } finally {
+      setSeedingId(null);
+    }
+  };
+
+  const handleNavigate = (envId: string, path: string) => {
+    router.push(`/environments/${envId}/${path}`);
+  };
+
+  const handleSeedAgain = (templateId: string) => {
+    setResults((prev) => {
+      const next = { ...prev };
+      delete next[templateId];
+      return next;
+    });
+  };
+
+  if (isLoading) return null;
+  if (templates.length === 0) return null;
+
+  return (
+    <div className="mt-12">
+      {/* Section header */}
+      <div className="mb-5">
+        <div className="flex items-center gap-2 mb-1">
+          <FiZap className="w-4 h-4 text-brand-1" />
+          <h2 className="text-[15px] font-bold text-text-primary tracking-[-0.2px]">Demo Environments</h2>
+        </div>
+        <p className="text-xs text-text-muted max-w-xl">
+          Pre-built with real CVSS vectors, EPSS scores, and relationship edges. Seed one and explore attack paths immediately.
+        </p>
+      </div>
+
+      {/* Template cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        {templates.map((template) => (
+          <TemplateCard
+            key={template.id}
+            template={template}
+            onSeed={() => handleSeed(template.id)}
+            isSeeding={seedingId === template.id}
+            anySeeding={seedingId !== null}
+            result={results[template.id] ?? null}
+            onNavigate={handleNavigate}
+            onSeedAgain={() => handleSeedAgain(template.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function EnvironmentsPage() {
   const router = useRouter();
   const [environments, setEnvironments] = useState<Environment[]>([]);
@@ -184,12 +471,9 @@ export default function EnvironmentsPage() {
   const loadEnvironments = useCallback(async () => {
     try {
       setError(null);
-      const { success, data, message } = await getEnvironments();
-      if (!success) {
-        setError(message || "Failed to load environments");
-        return;
-      }
-      setEnvironments(data);
+      const data = await fetchEnvironments();
+      
+      setEnvironments(data.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load environments");
     } finally {
@@ -303,6 +587,8 @@ export default function EnvironmentsPage() {
           </div>
         )}
       </div>
+
+      <DemoTemplatesSection onSeeded={loadEnvironments} />
 
       <CreateEnvironmentSlideOver
         isOpen={isSlideOverOpen}

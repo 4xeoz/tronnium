@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { FiAlertTriangle, FiMove } from "react-icons/fi";
-import { getOrCreateWorkflow, type WorkflowItem, type VulnStatus } from "@/lib/api/vulnerabilityWorkflow";
+import { getOrCreateVulnerabilityWorkflow, type WorkflowItem, type VulnStatus } from "@/lib/api/vulnerabilityWorkflow";
 import { Badge } from "./SecurityUI";
 import { STATUS_COLORS } from "@/lib/securityConstants";
 import type { AssetScan as AssetScanItem } from "@/lib/api";
@@ -84,8 +84,8 @@ export default function BoardView({
     if (!workflowId) {
       setIsCreatingWorkflow(card.id);
       try {
-        const response = await getOrCreateWorkflow(environmentId, card.assetId, card.vulnerabilityId, card.cpeName);
-        if (response.data) {
+        const response = await getOrCreateVulnerabilityWorkflow(environmentId, card.assetId, card.vulnerabilityId, card.cpeName);
+        if (response && response.data) {
           workflowId = response.data.id;
           onWorkflowCreated(response.data);
         } else {

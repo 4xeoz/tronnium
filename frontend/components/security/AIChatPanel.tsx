@@ -1,26 +1,92 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { FiAlertTriangle, FiCopy, FiCheck } from "react-icons/fi";
-import {
-  requestEnvironmentBriefing,
-  type EnvironmentBriefing,
-  type CriticalFinding,
-} from "@/lib/api/ai";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { FiSend, FiAlertTriangle, FiCheck, FiRefreshCw } from "react-icons/fi";
+import { fetchChatReply, type ChatMessage } from "@/lib/api/ai";
 
-const RISK_STYLES: Record<EnvironmentBriefing["overallRisk"], { badge: string }> = {
-  CRITICAL: { badge: "bg-error-bg text-error-text border-error-border" },
-  HIGH:     { badge: "bg-warning-bg text-warning-text border-warning-border" },
-  MEDIUM:   { badge: "bg-info-bg text-info-text border-info-border" },
-  LOW:      { badge: "bg-success-bg text-success-text border-success-border" },
-};
+function renderMarkdown(text: string) {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let key = 0;
 
-const URGENCY_DOT: Record<CriticalFinding["urgency"], string> = {
-  IMMEDIATE: "bg-error-text",
-  HIGH:      "bg-warning-text",
-  MEDIUM:    "bg-info-text",
-  LOW:       "bg-success-text",
-};
+  const renderInline = (line: string) => {
+    const parts = line.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, i) =>
+      part.startsWith("**") && part.endsWith("**")
+        ? <strong key={i} className="font-semibold text-text-primary">{part.slice(2, -2)}</strong>
+        : part
+    );
+  };
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (!line.trim()) { i++; continue; }
+
+    if (line.startsWith("## ")) {
+      elements.push(
+        <p key={key++} className="text-xs font-semibold text-text-muted uppercase tracking-wide mt-3 mb-1 first:mt-0">
+          {line.slice(3)}
+        </p>
+      );
+      i++;
+      continue;
+    }
+
+    // Collect consecutive numbered list items
+    if (/^\d+\.\s/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+\.\s/, ""));
+        i++;
+      }
+      elements.push(
+        <ol key={key++} className="space-y-1 my-1">
+          {items.map((item, idx) => (
+            <li key={idx} className="flex items-start gap-2">
+              <span className="w-4 h-4 rounded-full bg-brand-1/15 text-brand-2 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{idx + 1}</span>
+              <span>{renderInline(item)}</span>
+            </li>
+          ))}
+        </ol>
+      );
+      continue;
+    }
+
+    // Collect consecutive bullet items
+    if (line.startsWith("- ") || line.startsWith("• ")) {
+      const items: string[] = [];
+      while (i < lines.length && (lines[i].startsWith("- ") || lines[i].startsWith("• "))) {
+        items.push(lines[i].slice(2));
+        i++;
+      }
+      elements.push(
+        <ul key={key++} className="space-y-1 my-1">
+          {items.map((item, idx) => (
+            <li key={idx} className="flex items-start gap-2">
+              <span className="w-1 h-1 rounded-full bg-text-muted shrink-0 mt-2" />
+              <span>{renderInline(item)}</span>
+            </li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+
+    elements.push(<p key={key++} className="leading-relaxed">{renderInline(line)}</p>);
+    i++;
+  }
+
+  return elements;
+}
+
+const COMMANDS = [
+  { cmd: "/overview",  label: "Overview",   prompt: "Give me an overview of this environment's current security posture." },
+  { cmd: "/nextsteps", label: "Next steps",  prompt: "What are the most important next steps my team should take right now to remediate vulnerabilities?" },
+];
+
+const MAX_VISIBLE = 6;
 
 type Props = {
   environmentId: string;
@@ -29,51 +95,90 @@ type Props = {
 };
 
 export default function AIChatPanel({ environmentId, hasActiveScan, vulnCount }: Props) {
-  const [briefing, setBriefing] = useState<EnvironmentBriefing | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [showNextMoves, setShowNextMoves] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showCommands, setShowCommands] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const initialized = useRef(false);
 
-  const loadBriefing = useCallback(async () => {
-    if (!hasActiveScan) return;
+  const sendMessage = useCallback(async (userText: string, hidden = false) => {
+    const userMsg: ChatMessage = { role: "user", content: userText };
+
+    setMessages((prev) => {
+      if (hidden) return prev;
+      return [...prev, userMsg];
+    });
     setIsLoading(true);
     setError(null);
+
     try {
-      const res = await requestEnvironmentBriefing(environmentId);
-      if (res.success && res.data) {
-        setBriefing(res.data);
-      } else {
-        setError(res.message || "Failed to fetch AI briefing.");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      const history = hidden
+        ? [userMsg]
+        : [...messages, userMsg];
+
+      const res = await fetchChatReply(environmentId, history.slice(-MAX_VISIBLE));
+      const assistantMsg: ChatMessage = { role: "assistant", content: res.data.reply };
+
+      setMessages((prev) => {
+        if (hidden) return [assistantMsg];
+        return [...prev, assistantMsg];
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setIsLoading(false);
     }
-  }, [environmentId, hasActiveScan]);
+  }, [environmentId, messages]);
 
+  // Auto-load initial briefing
   useEffect(() => {
-    loadBriefing();
-  }, [loadBriefing]);
+    if (!hasActiveScan || vulnCount === 0 || initialized.current) return;
+    initialized.current = true;
+    sendMessage("Give me an overview of this environment's current security posture.", true);
+  }, [hasActiveScan, vulnCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleCopy = async () => {
-    if (!briefing) return;
-    const text = [
-      `Risk Level: ${briefing.overallRisk}`,
-      ``,
-      briefing.threatSummary,
-      ``,
-      ...(briefing.criticalFindings.length ? ["Critical Findings:", ...briefing.criticalFindings.map(f => `- ${f.title}: ${f.description} (${f.affectedAssets.join(", ")}) → ${f.recommendedAction}`)] : []),
-      ``,
-      ...(briefing.prioritizedActions.length ? ["Prioritized Actions:", ...briefing.prioritizedActions.map((a, i) => `${i + 1}. ${a}`)] : []),
-      ``,
-      ...(briefing.industryGuidance ? ["Industry Guidance:", briefing.industryGuidance] : []),
-    ].join("\n");
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
+
+  const handleSend = () => {
+    const text = input.trim();
+    if (!text || isLoading) return;
+    setInput("");
+    setShowCommands(false);
+    sendMessage(text);
   };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+    setShowCommands(val.startsWith("/") && val.length <= 12);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+    if (e.key === "Escape") setShowCommands(false);
+  };
+
+  const selectCommand = (prompt: string) => {
+    setInput("");
+    setShowCommands(false);
+    sendMessage(prompt);
+    inputRef.current?.focus();
+  };
+
+  const filteredCommands = COMMANDS.filter((c) =>
+    input.length <= 1 || c.cmd.startsWith(input)
+  );
+
+  // ── Guards ────────────────────────────────────────────────────
 
   if (!hasActiveScan) {
     return (
@@ -92,132 +197,101 @@ export default function AIChatPanel({ environmentId, hasActiveScan, vulnCount }:
         <div className="w-12 h-12 rounded-full bg-success-bg flex items-center justify-center mb-3 border border-success-border">
           <FiCheck className="w-5 h-5 text-success-text" />
         </div>
-        <p className="text-sm text-text-secondary">No active vulnerabilities found. Your environment appears clean.</p>
+        <p className="text-sm text-text-secondary">No active vulnerabilities. Your environment looks clean.</p>
       </div>
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center px-6 text-center space-y-3">
-        <div className="w-8 h-8 border-2 border-brand-1 border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-text-secondary">Analyzing environment...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center px-6 text-center">
-        <div className="w-12 h-12 rounded-full bg-error-bg flex items-center justify-center mb-3 border border-error-border">
-          <FiAlertTriangle className="w-5 h-5 text-error-text" />
-        </div>
-        <p className="text-sm text-error-text mb-3">{error}</p>
-        <button onClick={loadBriefing} className="text-sm text-brand-2 font-semibold hover:underline">Retry</button>
-      </div>
-    );
-  }
-
-  if (!briefing) return null;
-
-  const riskStyle = RISK_STYLES[briefing.overallRisk];
+  // ── Chat UI ───────────────────────────────────────────────────
 
   return (
-    <div className="h-full overflow-y-auto px-4 py-4 space-y-4">
-      {/* Risk summary card */}
-      <div className="bg-surface-secondary border border-border rounded-[16px] p-4">
-        <div className="flex items-center justify-between mb-3">
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${riskStyle.badge}`}>
-            {briefing.overallRisk} RISK
-          </span>
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1.5 text-xs font-medium text-text-secondary hover:text-text-primary px-2 py-1 rounded-[8px] hover:bg-surface transition-colors"
-          >
-            {copied ? <FiCheck className="w-3.5 h-3.5" /> : <FiCopy className="w-3.5 h-3.5" />}
-            {copied ? "Copied" : "Copy"}
-          </button>
-        </div>
-        <p className="text-sm text-text-secondary leading-relaxed">{briefing.threatSummary}</p>
+    <div className="h-full flex flex-col">
+
+      {/* Message list */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {messages.length === 0 && isLoading && (
+          <div className="flex items-center gap-2 text-text-muted text-sm">
+            <div className="w-4 h-4 border-2 border-brand-1 border-t-transparent rounded-full animate-spin shrink-0" />
+            Analyzing environment...
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div
+              className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
+                msg.role === "user"
+                  ? "bg-brand-1 text-brand-2 rounded-br-sm leading-relaxed"
+                  : "bg-surface-secondary border border-border text-text-secondary rounded-bl-sm space-y-1"
+              }`}
+            >
+              {msg.role === "user" ? msg.content : renderMarkdown(msg.content)}
+            </div>
+          </div>
+        ))}
+
+        {messages.length > 0 && isLoading && (
+          <div className="flex justify-start">
+            <div className="bg-surface-secondary border border-border rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:0ms]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:150ms]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:300ms]" />
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-center gap-2 text-error-text text-xs bg-error-bg border border-error-border rounded-xl px-3 py-2">
+            <FiAlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <span className="flex-1">{error}</span>
+            <button onClick={() => sendMessage(messages[messages.length - 1]?.content ?? "")} className="shrink-0">
+              <FiRefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        <div ref={bottomRef} />
       </div>
 
-      {/* Critical findings */}
-      {briefing.criticalFindings.length > 0 && (
-        <div className="bg-surface-secondary border border-border rounded-[16px] p-4">
-          <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">Critical Findings</p>
-          <div className="space-y-3">
-            {briefing.criticalFindings.map((finding, i) => (
-              <div key={i} className="bg-surface rounded-[12px] p-3 border border-border">
-                <div className="flex items-start gap-2 mb-1">
-                  <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${URGENCY_DOT[finding.urgency]}`} />
-                  <p className="text-sm font-medium text-text-primary">{finding.title}</p>
-                </div>
-                <p className="text-xs text-text-secondary leading-relaxed ml-3.5 mb-1.5">{finding.description}</p>
-                <div className="ml-3.5 flex flex-wrap gap-1.5 items-center">
-                  {finding.affectedAssets.map((asset) => (
-                    <span key={asset} className="text-xs bg-surface-secondary border border-border text-text-muted px-1.5 py-0.5 rounded">{asset}</span>
-                  ))}
-                  <span className="text-xs text-brand-2 font-medium">→ {finding.recommendedAction}</span>
-                </div>
-              </div>
+      {/* Input area */}
+      <div className="border-t border-border px-4 py-3 relative">
+        {/* Command suggestions */}
+        {showCommands && filteredCommands.length > 0 && (
+          <div className="absolute bottom-full left-4 right-4 mb-2 bg-surface border border-border rounded-xl shadow-lg overflow-hidden">
+            {filteredCommands.map((c) => (
+              <button
+                key={c.cmd}
+                onClick={() => selectCommand(c.prompt)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-surface-secondary text-left transition-colors"
+              >
+                <span className="font-mono text-brand-2 font-medium text-xs">{c.cmd}</span>
+                <span className="text-text-muted">{c.label}</span>
+              </button>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Systemic risks */}
-      {briefing.systemicRisks.length > 0 && (
-        <div className="bg-surface-secondary border border-border rounded-[16px] p-4">
-          <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Systemic Risks</p>
-          <ul className="space-y-1">
-            {briefing.systemicRisks.map((risk, i) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-text-secondary">
-                <FiAlertTriangle className="w-3 h-3 text-warning-text shrink-0 mt-0.5" />
-                {risk}
-              </li>
-            ))}
-          </ul>
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder='Ask anything or type "/" for commands...'
+            rows={1}
+            disabled={isLoading}
+            className="flex-1 resize-none bg-surface-secondary border border-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-1/30 disabled:opacity-50 max-h-32 overflow-y-auto"
+            style={{ lineHeight: "1.5" }}
+          />
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() || isLoading}
+            className="w-9 h-9 rounded-xl bg-brand-1 text-brand-2 flex items-center justify-center hover:opacity-90 transition-all disabled:opacity-40 shrink-0"
+          >
+            <FiSend className="w-4 h-4" />
+          </button>
         </div>
-      )}
-
-      {/* Next moves toggle */}
-      <div className="flex flex-col gap-2">
-        <button
-          onClick={() => setShowNextMoves(v => !v)}
-          className="w-full px-3 py-2 text-xs font-semibold bg-brand-1 text-brand-2 hover:opacity-90 rounded-full transition-all"
-        >
-          {showNextMoves ? "Hide Next Moves" : "Show Next Moves"}
-        </button>
       </div>
-
-      {/* Next moves content */}
-      {showNextMoves && (
-        <div className="bg-surface-secondary border border-border rounded-[16px] p-4 space-y-3">
-          <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">Prioritized Remediation Steps</p>
-          {briefing.prioritizedActions.length > 0 ? (
-            <ol className="space-y-2">
-              {briefing.prioritizedActions.map((action, i) => (
-                <li key={i} className="flex items-start gap-2.5 text-sm text-text-secondary">
-                  <span className="w-5 h-5 rounded-full bg-brand-1/10 text-brand-2 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                  {action}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="text-sm text-text-secondary">No specific remediation steps identified.</p>
-          )}
-          {briefing.industryGuidance && (
-            <div className="pt-2 border-t border-border">
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1.5">Industry Guidance</p>
-              <p className="text-xs text-text-secondary leading-relaxed">{briefing.industryGuidance}</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {briefing.model !== "stub" && (
-        <p className="text-xs text-text-muted text-center">Powered by {briefing.model}</p>
-      )}
     </div>
   );
 }

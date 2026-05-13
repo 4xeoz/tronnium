@@ -1,10 +1,12 @@
 /**
- * Dev Mode API - Mock vulnerability generation and management
+ * Dev Mode API - Network operations for mock vulnerability generation
+ * Each function returns exactly what the backend sends, unwrapped.
  */
 
 import { apiFetch, ApiResponse } from "./client";
 
-// Types
+// ─── Types ───────────────────────────────────────────────────
+
 export type MockVulnerability = {
   id: string;
   cveId: string;
@@ -63,9 +65,46 @@ export type ClearMockVulnerabilitiesResponse = {
   deletedScans: number;
 };
 
-/**
- * Generate mock vulnerabilities using LLM
- */
+export type CreateTestVulnerabilityRequest = {
+  environmentId: string;
+  assetId: string;
+  cveId: string;
+  cvssScore?: number;
+  cvssVector?: string;
+  epssPercentile?: number;
+  description?: string;
+  severity?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
+};
+
+export type CreateTestVulnerabilityResponse = {
+  vulnerability: {
+    id: string;
+    cveId: string;
+    description: string;
+    cvssScore: number | null;
+    cvssVector: string | null;
+    epssPercentile: number | null;
+    severity: string;
+    isMock: boolean;
+  };
+  workflow: {
+    id: string;
+    status: string;
+  };
+};
+
+// ─── Fetch Functions ─────────────────────────────────────────
+
+export async function fetchMockVulnerabilities(environmentId: string): Promise<ApiResponse<MockVulnerability[]>> {
+  return apiFetch<MockVulnerability[]>(`/dev/mock-vulnerabilities/${environmentId}`);
+}
+
+export async function fetchMockVulnerabilityStats(environmentId: string): Promise<ApiResponse<MockVulnerabilityStats>> {
+  return apiFetch<MockVulnerabilityStats>(`/dev/mock-vulnerabilities/${environmentId}/stats`);
+}
+
+// ─── Mutations ───────────────────────────────────────────────
+
 export async function generateMockVulnerabilities(
   environmentId: string,
   prompt: string,
@@ -79,65 +118,55 @@ export async function generateMockVulnerabilities(
   });
 }
 
-/**
- * Get all mock vulnerabilities for an environment
- */
-export async function getMockVulnerabilities(
-  environmentId: string
-): Promise<ApiResponse<MockVulnerability[]>> {
-  return apiFetch<MockVulnerability[]>(`/dev/mock-vulnerabilities/${environmentId}`);
+export async function clearMockVulnerabilities(environmentId: string): Promise<ApiResponse<ClearMockVulnerabilitiesResponse>> {
+  return apiFetch<ClearMockVulnerabilitiesResponse>(`/dev/mock-vulnerabilities/${environmentId}`, {
+    method: "DELETE",
+  });
 }
 
-/**
- * Clear all mock vulnerabilities for an environment
- */
-export async function clearMockVulnerabilities(
-  environmentId: string
-): Promise<ApiResponse<ClearMockVulnerabilitiesResponse>> {
-  return apiFetch<ClearMockVulnerabilitiesResponse>(
-    `/dev/mock-vulnerabilities/${environmentId}`,
-    {
-      method: "DELETE",
-    }
-  );
+export async function createTestVulnerability(
+  payload: CreateTestVulnerabilityRequest
+): Promise<ApiResponse<CreateTestVulnerabilityResponse>> {
+  return apiFetch<CreateTestVulnerabilityResponse>("/dev/create-test-vulnerability", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
-/**
- * Get mock vulnerability statistics
- */
-export async function getMockVulnerabilityStats(
-  environmentId: string
-): Promise<ApiResponse<MockVulnerabilityStats>> {
-  return apiFetch<MockVulnerabilityStats>(
-    `/dev/mock-vulnerabilities/${environmentId}/stats`
-  );
+// ─── Seed Templates ──────────────────────────────────────────
+
+export type SeedTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  longDescription: string;
+  tags: string[];
+  stats: {
+    assets: number;
+    vulnerabilities: number;
+    relationships: number;
+  };
+};
+
+export type SeedResult = {
+  environmentId: string;
+  environmentName: string;
+  summary: {
+    assets: number;
+    vulnerabilities: number;
+    relationships: number;
+  };
+};
+
+export async function fetchSeedTemplates(): Promise<ApiResponse<SeedTemplate[]>> {
+  return apiFetch<SeedTemplate[]>("/dev/seed-templates");
 }
 
-/**
- * Get severity color class for mock badges
- */
-export function getMockSeverityColor(severity: string): string {
-  switch (severity) {
-    case "CRITICAL":
-      return "bg-red-500 text-white";
-    case "HIGH":
-      return "bg-orange-500 text-white";
-    case "MEDIUM":
-      return "bg-yellow-500 text-black";
-    case "LOW":
-      return "bg-blue-500 text-white";
-    default:
-      return "bg-gray-500 text-white";
-  }
-}
-
-/**
- * Format CVE ID for display
- */
-export function formatCveId(cveId: string): string {
-  // If it's a mock CVE, make it clear
-  if (cveId.startsWith("CVE-DEV-")) {
-    return cveId.replace("CVE-DEV-", "DEV-");
-  }
-  return cveId;
+export async function seedTemplate(templateId: string): Promise<ApiResponse<SeedResult>> {
+  return apiFetch<SeedResult>("/dev/seed-template", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ templateId }),
+  });
 }

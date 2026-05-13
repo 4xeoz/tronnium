@@ -73,9 +73,8 @@ export async function generateMockVulnerabilities(
   console.log(`[MockVuln] Targets: ${targets ? targets.map(t => `${t.assetName}${t.cpeIdentifier ? ` (${t.cpeIdentifier})` : ''}`).join(', ') : 'All assets'}`);
 
   for (const vuln of generated) {
-    await prisma.vulnerability.upsert({
-      where: { cveId: vuln.cveId },
-      create: {
+    await prisma.vulnerability.create({
+      data: {
         cveId: vuln.cveId,
         description: vuln.description,
         severity: vuln.severity,
@@ -85,15 +84,6 @@ export async function generateMockVulnerabilities(
         mockPrompt: prompt,
         createdBy: userId,
         publishedDate: new Date(),
-        lastModifiedDate: new Date(),
-      },
-      update: {
-        description: vuln.description,
-        severity: vuln.severity,
-        cvssScore: vuln.cvssScore,
-        cvssVector: vuln.cvssVector || generateCvssVector(vuln.severity),
-        mockPrompt: prompt,
-        createdBy: userId,
         lastModifiedDate: new Date(),
       },
     });
@@ -307,6 +297,13 @@ export async function clearMockVulnerabilities(environmentId: string): Promise<{
   const deletedVulns = await prisma.vulnerability.deleteMany({
     where: {
       isMock: true,
+      assetVulnerabilities: {
+        some: {
+          assetScan: {
+            scanId: { in: scanIds },
+          },
+        },
+      },
     },
   });
 

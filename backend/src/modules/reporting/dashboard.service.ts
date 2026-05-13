@@ -1,7 +1,7 @@
 import prisma from "../../lib/prisma";
 import { ScanStatus, VulnStatus } from "@prisma/client";
 import type { LatestScanSummary, RecentScanSummary } from "../scan-core/public";
-import { SEVERITY_WEIGHT, whereNotMock } from "../../lib/severity";
+import { SEVERITY_WEIGHT } from "../../lib/severity";
 import { isInactiveStatus } from "../vulnerability-workflows/public";
 
 const SLA_DAYS: Record<string, number> = {
@@ -41,7 +41,6 @@ export async function getDashboardOverview(environmentId: string): Promise<Dashb
       where: {
         environmentId,
         status: ScanStatus.COMPLETED,
-        ...whereNotMock,
       },
       orderBy: { completedAt: "desc" },
       include: {
@@ -64,7 +63,7 @@ export async function getDashboardOverview(environmentId: string): Promise<Dashb
       },
     }),
     prisma.securityScan.findMany({
-      where: { environmentId, ...whereNotMock },
+      where: { environmentId },
       orderBy: { startedAt: "desc" },
       take: 4,
     }),

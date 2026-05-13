@@ -1,25 +1,24 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import {
   generateMockVulnerabilities,
   clearMockVulnerabilities,
-  getMockVulnerabilities,
-  getMockVulnerabilityStats,
+  fetchMockVulnerabilities,
+  fetchMockVulnerabilityStats,
   type GeneratedVulnerability,
   type MockVulnerability,
-  type MockVulnerabilityStats,
-  formatCveId,
-} from "@/lib/api";
-import { getAssets, type Asset } from "@/lib/api/assets";
+  type MockVulnerabilityStats} from "@/lib/api";
+import { fetchAssets, type Asset } from "@/lib/api/assets";
+import { formatCveId } from "@/lib/formatters";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 
 const STEPS = {
   START: 'start',
-  SELECT: 'select',
   PROMPT: 'prompt',
   GENERATING: 'generating',
   RESULTS: 'results'
@@ -46,25 +45,27 @@ function AIVulnGenerator() {
   const [mockVulns, setMockVulns] = useState<MockVulnerability[]>([]);
   const [stats, setStats] = useState<MockVulnerabilityStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selectedAssets, setSelectedAssets] = useState<SelectedAsset[]>([]);
   const [expandedAssets, setExpandedAssets] = useState<Set<string>>(new Set());
+  const [selectedSeverity, setSelectedSeverity] = useState<"CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | null>(null);
+  const cancelledRef = useRef(false);
 
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
       const [vulnsRes, statsRes, assetsRes] = await Promise.all([
-        getMockVulnerabilities(envId),
-        getMockVulnerabilityStats(envId),
-        getAssets(envId),
+        fetchMockVulnerabilities(envId),
+        fetchMockVulnerabilityStats(envId),
+        fetchAssets(envId),
       ]);
-      if (vulnsRes.data) setMockVulns(vulnsRes.data);
-      if (statsRes.data) setStats(statsRes.data);
-      if (assetsRes.data) setAssets(assetsRes.data);
+      if (vulnsRes) setMockVulns(vulnsRes.data);
+      if (statsRes) setStats(statsRes.data);
+      if (assetsRes) setAssets(assetsRes.data);
     } catch (err) {
       console.error("Failed to load data:", err);
     } finally {
@@ -107,58 +108,43 @@ function AIVulnGenerator() {
     });
   };
 
-  const handleContinueToPrompt = () => {
-    if (selectedAssets.length === 0) return;
-    setStep(STEPS.PROMPT);
-    handleGeneratePrompt();
-  };
-
-  const handleGeneratePrompt = () => {
-    setIsGeneratingPrompt(true);
-    setTimeout(() => {
-      const generated = buildContextualPrompt();
-      setPrompt(generated);
-      setIsGeneratingPrompt(false);
-    }, 300);
-  };
-
   const buildContextualPrompt = (): string => {
     const uniqueAssets = [...new Set(selectedAssets.map(s => s.assetName))];
     const cpes = selectedAssets.map(s => s.cpeDisplay).filter(Boolean) as string[];
     const assetList = uniqueAssets.join(", ");
     const cpeList = cpes.length > 0 ? cpes.slice(0, 2).join(", ") : "the selected systems";
-    return `Generate 3 realistic vulnerabilities for:
+    return `Generate 1 realistic vulnerability for:
 
 Assets: ${assetList}
 ${cpes.length > 0 ? `CPEs: ${cpeList}${cpes.length > 2 ? ` +${cpes.length - 2} more` : ""}` : ""}
 
-Create:
-- 1 Critical: Remote Code Execution
-- 1 High: SQL Injection or Auth Bypass
-- 1 Medium: Information Disclosure
+Severity: ${selectedSeverity}
 
-Make them technically detailed and realistic for these specific systems.`;
+Invent a creative, technically detailed, and realistic vulnerability description specific to these systems. Do not use generic placeholder text.`;
+  };
+
+  const handleContinueToPrompt = () => {
+    if (selectedAssets.length === 0) return;
+    setStep(STEPS.PROMPT);
   };
 
   const handleSendToLLM = async () => {
-    if (!prompt.trim()) return;
+    cancelledRef.current = false;
     setIsSending(true);
     setStep(STEPS.GENERATING);
     setError(null);
     try {
+      const builtPrompt = buildContextualPrompt();
       const targets = selectedAssets.map(s => ({ assetId: s.assetId, assetName: s.assetName, cpeIdentifier: s.cpeIdentifier }));
-      const response = await generateMockVulnerabilities(envId, prompt, 3, targets);
-      if (response.data) {
-        setGeneratedVulns(response.data.vulnerabilities);
-        await loadData();
-        setStep(STEPS.RESULTS);
-        setPrompt("");
-        setSelectedAssets([]);
-      } else {
-        setError(response.message || "Failed");
-        setStep(STEPS.PROMPT);
-      }
+      const response = await generateMockVulnerabilities(envId, builtPrompt, 1, targets);
+      if (cancelledRef.current) return;
+      setGeneratedVulns(response.data.vulnerabilities);
+      await loadData();
+      setStep(STEPS.RESULTS);
+      setPrompt("");
+      setSelectedAssets([]);
     } catch (err) {
+      if (cancelledRef.current) return;
       const msg = err instanceof Error ? err.message : "Error";
       if (msg.includes("GEMINI_API_KEY")) setError("AI service not configured. Please set GEMINI_API_KEY in environment.");
       else if (msg.includes("No assets found")) setError("No assets in environment. Add assets first.");
@@ -170,9 +156,15 @@ Make them technically detailed and realistic for these specific systems.`;
     }
   };
 
+  const handleCancelGeneration = () => {
+    cancelledRef.current = true;
+    setIsSending(false);
+    setStep(STEPS.PROMPT);
+  };
+
   const handleClear = async () => {
-    if (!confirm("Clear all?")) return;
     setClearing(true);
+    setConfirmClear(false);
     try {
       await clearMockVulnerabilities(envId);
       setMockVulns([]);
@@ -192,6 +184,7 @@ Make them technically detailed and realistic for these specific systems.`;
     setPrompt("");
     setError(null);
     setSelectedAssets([]);
+    setSelectedSeverity(null);
   };
 
   const totalCount = stats?.total || 0;
@@ -204,10 +197,21 @@ Make them technically detailed and realistic for these specific systems.`;
             <h2 className="text-[18px] font-bold text-text-primary tracking-[-0.2px]">Mock Vulnerability Generator</h2>
             <p className="text-[13px] text-text-muted mt-0.5">Select assets to target</p>
           </div>
-          {totalCount > 0 && (
-            <Button variant="danger" size="sm" onClick={handleClear} disabled={clearing}>
-              {clearing ? "..." : "Clear"}
+          {totalCount > 0 && !confirmClear && (
+            <Button variant="danger" size="sm" onClick={() => setConfirmClear(true)} disabled={clearing}>
+              {clearing ? "Clearing..." : "Clear All"}
             </Button>
+          )}
+          {confirmClear && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-text-muted">Clear all mock data?</span>
+              <Button variant="danger" size="sm" onClick={handleClear} disabled={clearing}>
+                {clearing ? "Clearing..." : "Confirm"}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setConfirmClear(false)}>
+                Cancel
+              </Button>
+            </div>
           )}
         </div>
 
@@ -251,7 +255,7 @@ Make them technically detailed and realistic for these specific systems.`;
                     <div key={asset.id} className="border border-border rounded-[10px] overflow-hidden">
                       <div
                         className={`flex items-center justify-between p-3 cursor-pointer transition-colors ${assetSelected ? 'bg-brand-mint/30' : 'hover:bg-background-secondary'}`}
-                        onClick={() => !hasCpes && toggleAsset(asset)}
+                        onClick={() => hasCpes ? toggleExpand(asset.id) : toggleAsset(asset)}
                       >
                         <div className="flex items-center gap-3">
                           <input
@@ -266,16 +270,11 @@ Make them technically detailed and realistic for these specific systems.`;
                             <div className="text-xs text-text-muted">{asset.type}</div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {hasCpes && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); toggleExpand(asset.id); }}
-                              className="text-xs text-text-muted hover:text-text-primary px-2 py-1 rounded-[6px] hover:bg-surface-secondary transition-colors"
-                            >
-                              {cpes.length} CPEs {isExpanded ? '▲' : '▼'}
-                            </button>
-                          )}
-                        </div>
+                        {hasCpes && (
+                          <span className="text-xs text-text-muted px-2 py-1">
+                            {cpes.length} CPEs {isExpanded ? '▲' : '▼'}
+                          </span>
+                        )}
                       </div>
                       {isExpanded && hasCpes && (
                         <div className="border-t border-border bg-background-secondary/50">
@@ -296,8 +295,8 @@ Make them technically detailed and realistic for these specific systems.`;
                   );
                 })}
               </div>
-              <Button onClick={() => setStep(STEPS.SELECT)} disabled={selectedAssets.length === 0} className="w-full">
-                Continue ({selectedAssets.length} selected)
+              <Button onClick={handleContinueToPrompt} disabled={selectedAssets.length === 0} className="w-full">
+                Generate Prompt ({selectedAssets.length} selected)
               </Button>
             </>
           )}
@@ -320,65 +319,85 @@ Make them technically detailed and realistic for these specific systems.`;
     );
   }
 
-  if (step === STEPS.SELECT) {
-    const uniqueAssetIds = [...new Set(selectedAssets.map(s => s.assetId))];
-    return (
-      <div className="bg-surface rounded-[16px] border border-border overflow-hidden">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-          <h2 className="text-[18px] font-bold text-text-primary tracking-[-0.2px]">Selection</h2>
-          <button onClick={() => setStep(STEPS.START)} className="text-sm text-text-muted hover:text-text-primary font-medium">Back</button>
-        </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <div className="text-sm font-semibold text-text-primary mb-2">{selectedAssets.length} items selected</div>
-            <div className="bg-background-secondary rounded-[10px] p-3 space-y-1">
-              {uniqueAssetIds.map(assetId => {
-                const assetSelections = selectedAssets.filter(s => s.assetId === assetId);
-                const name = assetSelections[0]?.assetName || 'Unknown';
-                const cpes = assetSelections.filter(s => s.cpeIdentifier).map(s => s.cpeDisplay);
-                return (
-                  <div key={assetId} className="text-sm">
-                    <span className="font-medium text-text-primary">{name}</span>
-                    {cpes.length > 0 && <span className="text-text-muted text-xs ml-2">({cpes.length} CPEs)</span>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <Button onClick={handleContinueToPrompt} disabled={isGeneratingPrompt} isLoading={isGeneratingPrompt} className="w-full">
-            Generate Prompt
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   if (step === STEPS.PROMPT) {
+    const uniqueAssetIds = [...new Set(selectedAssets.map(s => s.assetId))];
+    const severities = [
+      { value: "CRITICAL" as const, label: "Critical", sub: "9.0 – 10.0", activeClass: "bg-error-bg border-error-border text-error-text", dotClass: "bg-error-text" },
+      { value: "HIGH"     as const, label: "High",     sub: "7.0 – 8.9",  activeClass: "bg-warning-bg border-warning-border text-warning-text", dotClass: "bg-warning-text" },
+      { value: "MEDIUM"   as const, label: "Medium",   sub: "4.0 – 6.9",  activeClass: "bg-info-bg border-info-border text-info-text", dotClass: "bg-info-text" },
+      { value: "LOW"      as const, label: "Low",      sub: "0.1 – 3.9",  activeClass: "bg-success-bg border-success-border text-success-text", dotClass: "bg-success-text" },
+    ] as const;
     return (
       <div className="bg-surface rounded-[16px] border border-border overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-          <h2 className="text-[18px] font-bold text-text-primary tracking-[-0.2px]">Review</h2>
-          <button onClick={handleStartOver} className="text-sm text-text-muted hover:text-text-primary font-medium">Cancel</button>
+          <div>
+            <h2 className="text-[18px] font-bold text-text-primary tracking-[-0.2px]">Configure Vulnerability</h2>
+            <p className="text-[13px] text-text-muted mt-0.5">
+              {uniqueAssetIds.length} {uniqueAssetIds.length === 1 ? "asset" : "assets"} targeted
+            </p>
+          </div>
+          <button onClick={handleStartOver} className="text-sm text-text-muted hover:text-text-primary font-medium">← Back</button>
         </div>
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-5">
           {error && (
             <div className="bg-error-bg border border-error-border rounded-[10px] text-error-text px-4 py-3 text-sm">
               {error}
             </div>
           )}
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="w-full h-48 p-4 bg-background-secondary border border-border rounded-[10px] text-sm font-mono text-text-primary focus:outline-none focus:border-brand-1 focus:ring-2 focus:ring-brand-1/20 resize-none"
-          />
-          <div className="flex gap-3">
-            <Button variant="secondary" onClick={handleGeneratePrompt} disabled={isGeneratingPrompt} isLoading={isGeneratingPrompt}>
-              Regenerate
-            </Button>
-            <Button onClick={handleSendToLLM} disabled={isSending || !prompt.trim()} isLoading={isSending} className="flex-1">
-              Send to AI
-            </Button>
+
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.6px] text-text-muted mb-2">Severity</div>
+            <div className="grid grid-cols-2 gap-2">
+              {severities.map(({ value, label, sub, activeClass, dotClass }) => {
+                const isActive = selectedSeverity === value;
+                return (
+                  <button
+                    key={value}
+                    onClick={() => setSelectedSeverity(value)}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-[10px] border text-left transition-all ${
+                      isActive
+                        ? activeClass
+                        : "border-border bg-background-secondary hover:bg-background-secondary/70 text-text-primary"
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? dotClass : "bg-border"}`} />
+                    <span>
+                      <span className="block text-sm font-semibold">{label}</span>
+                      <span className={`block text-[11px] ${isActive ? "opacity-70" : "text-text-muted"}`}>CVSS {sub}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.6px] text-text-muted mb-2">Targets</div>
+            <div className="space-y-1.5">
+              {uniqueAssetIds.map(assetId => {
+                const assetSelections = selectedAssets.filter(s => s.assetId === assetId);
+                const name = assetSelections[0]?.assetName || "Unknown";
+                const cpeCount = assetSelections.filter(s => s.cpeIdentifier).length;
+                return (
+                  <div key={assetId} className="flex items-center justify-between px-3 py-2 bg-background-secondary rounded-lg">
+                    <span className="text-sm font-medium text-text-primary">{name}</span>
+                    <span className="text-xs text-text-muted">
+                      {cpeCount > 0 ? `${cpeCount} CPE${cpeCount > 1 ? "s" : ""}` : "No specific CPE"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <Button
+            onClick={handleSendToLLM}
+            disabled={isSending || !selectedSeverity}
+            isLoading={isSending}
+            className="w-full"
+          >
+            Generate Vulnerability
+          </Button>
         </div>
       </div>
     );
@@ -390,6 +409,12 @@ Make them technically detailed and realistic for these specific systems.`;
         <div className="w-10 h-10 border-2 border-border border-t-brand-1 rounded-full animate-spin mx-auto mb-4" />
         <h2 className="text-lg font-semibold text-text-primary">Generating</h2>
         <p className="text-sm text-text-muted mt-1">Creating vulnerabilities...</p>
+        <button
+          onClick={handleCancelGeneration}
+          className="mt-6 text-sm text-text-muted hover:text-text-primary font-medium transition-colors"
+        >
+          Cancel
+        </button>
       </div>
     );
   }
@@ -399,7 +424,7 @@ Make them technically detailed and realistic for these specific systems.`;
       <div className="bg-surface rounded-[16px] border border-border overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
           <h2 className="text-[18px] font-bold text-text-primary tracking-[-0.2px]">Done</h2>
-          <p className="text-[13px] text-text-muted mt-0.5">{generatedVulns.length} created</p>
+          <p className="text-[13px] text-text-muted mt-0.5">Vulnerability created{selectedSeverity ? ` · ${selectedSeverity}` : ""}</p>
         </div>
         <div className="p-5 space-y-3">
           {generatedVulns.map((vuln, idx) => (

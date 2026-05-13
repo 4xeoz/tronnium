@@ -62,7 +62,7 @@ enum AssetStatus {
 
 ### 1.4 Relationship Type – Bidirectional Query Consideration
 
-- If asset A `DEPENDS_ON` asset B, backward queries must be efficient.
+- If asset A `NETWORK_CONNECTS_TO` asset B, backward queries must be efficient.
 - Model is valid conceptually, but service-layer query patterns must support reverse traversal.
 
 ---

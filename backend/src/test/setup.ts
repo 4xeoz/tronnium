@@ -11,5 +11,8 @@ console.log("Loaded .env variables:", {
     DATABASE_URL: process.env.DATABASE_URL ? "****" : "MISSING",
 });
 
-import prisma from "../lib/prisma";
-afterAll(() => prisma.$disconnect());    // clean shutdown
+// Only connect to the DB when it's actually configured (unit tests skip this)
+if (process.env.DATABASE_URL) {
+    const prisma = require("../lib/prisma").default;
+    afterAll(() => prisma.$disconnect());
+}

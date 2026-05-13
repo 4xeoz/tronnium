@@ -1,5 +1,6 @@
 /**
- * Environment API - CRUD operations for environments
+ * Environment API - Network operations for environments
+ * Each function returns exactly what the backend sends, unwrapped.
  */
 
 import { apiFetch, ApiResponse } from "./client";
@@ -21,14 +22,17 @@ export type CreateEnvironmentInput = {
   labels?: string[];
 };
 
-// API Functions
-export async function getEnvironments(): Promise<ApiResponse<Environment[]>> {
+// ─── Fetch Functions ─────────────────────────────────────────
+
+export async function fetchEnvironments(): Promise<ApiResponse<Environment[]>> {
   return apiFetch<Environment[]>("/environments");
 }
 
-export async function getEnvironment(id: string): Promise<ApiResponse<Environment>> {
+export async function fetchEnvironmentById(id: string): Promise<ApiResponse<Environment>> {
   return apiFetch<Environment>(`/environments/${id}`);
 }
+
+// ─── Mutations ───────────────────────────────────────────────
 
 export async function createEnvironment(data: CreateEnvironmentInput): Promise<ApiResponse<Environment>> {
   return apiFetch<Environment>("/environments", {
@@ -38,8 +42,8 @@ export async function createEnvironment(data: CreateEnvironmentInput): Promise<A
   });
 }
 
-export async function deleteEnvironment(id: string): Promise<void> {
-  await apiFetch<void>(`/environments/${id}`, {
+export async function deleteEnvironment(id: string): Promise<ApiResponse<void>> {
+  return apiFetch<void>(`/environments/${id}`, {
     method: "DELETE",
   });
 }

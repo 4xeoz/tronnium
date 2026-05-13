@@ -72,6 +72,9 @@ export function jwtAuthGuard() {
         console.error("[JWT Guard] Error:", err);
         return res.status(500).json({ success: false, error: "AUTH_ERROR", message: "Authentication error" });
       }
+
+      console.log("[JWT Guard] Authentication info:", info);
+      console.log("[JWT Guard] Authenticated user:", user);
       if (!user) {
         return res.status(401).json({ success: false, error: "UNAUTHORIZED", message: info?.message || "Invalid or missing token" });
       }

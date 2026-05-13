@@ -21,7 +21,7 @@ const fallbackBriefing: Omit<EnvironmentBriefing, "model"> = {
   industryGuidance: "Refer to NIST CSF, CIS Controls v8, and ICS-CERT advisories.",
 };
 
-function buildVulnerabilityMatrix(assetScans: AssetScanEntry[]): string {
+export function buildVulnerabilityMatrix(assetScans: AssetScanEntry[]): string {
   const totals: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
   const cveToAssets = new Map<string, string[]>();
 

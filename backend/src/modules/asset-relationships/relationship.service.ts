@@ -11,7 +11,7 @@ class AssetRelationshipService {
     }
 
     // Create a new relationship between two assets
-    public async createRelationship(environmentId: string, fromAssetId: string, toAssetId: string, type: RelationType, criticality: RelationshipCriticality) {
+    public async createRelationship(environmentId: string, fromAssetId: string, toAssetId: string, type: RelationType, operationalCriticality: RelationshipCriticality) {
 
         return prisma.relationship.create({
             data: {
@@ -19,7 +19,7 @@ class AssetRelationshipService {
                 fromAssetId,
                 toAssetId,
                 type ,
-                criticality
+                operationalCriticality
             },
         });
     }
@@ -31,11 +31,11 @@ class AssetRelationshipService {
         });
     }
 
-    // Update the criticality or type of a relationship
-    public async updateRelationship(relationshipId: string, type?: string, criticality?: string) {
+    // Update the operationalCriticality or type of a relationship
+    public async updateRelationship(relationshipId: string, type?: string, operationalCriticality?: string) {
         const data: any = {};
         if (type) data.type = type;
-        if (criticality) data.criticality = criticality;
+        if (operationalCriticality) data.operationalCriticality = operationalCriticality;
 
         return prisma.relationship.update({
             where: { id: relationshipId },
