@@ -47,6 +47,7 @@ describe("calculateEdgeCost", () => {
           requiresUserInteraction: false,
           isHighConfidence: true,
           isDoSOnly: false,
+          isAdjacentOnly: false,
         },
       ],
     });
@@ -72,6 +73,7 @@ describe("calculateEdgeCost", () => {
           requiresUserInteraction: true,
           isHighConfidence: false,
           isDoSOnly: false,
+          isAdjacentOnly: false,
         },
       ],
     });
@@ -101,6 +103,7 @@ describe("calculateEdgeCost", () => {
           requiresUserInteraction: false,
           isHighConfidence: false,
           isDoSOnly: false,
+          isAdjacentOnly: false,
         },
       ],
     });
@@ -131,6 +134,7 @@ describe("calculateEdgeCost", () => {
           requiresUserInteraction: false,
           isHighConfidence: true,
           isDoSOnly: false,
+          isAdjacentOnly: false,
         },
       ],
     });
@@ -151,6 +155,7 @@ describe("calculateEdgeCost", () => {
           requiresUserInteraction: false,
           isHighConfidence: true,
           isDoSOnly: false,
+          isAdjacentOnly: false,
         },
       ],
     });
@@ -173,6 +178,7 @@ describe("calculateEdgeCost", () => {
           requiresUserInteraction: false,
           isHighConfidence: true,
           isDoSOnly: false,
+          isAdjacentOnly: false,
         },
       ],
     });
@@ -187,6 +193,7 @@ describe("calculateEdgeCost", () => {
           requiresUserInteraction: false,
           isHighConfidence: false,
           isDoSOnly: false,
+          isAdjacentOnly: false,
         },
       ],
     });
@@ -339,6 +346,7 @@ describe("checkExploitabilityGate", () => {
           requiresUserInteraction: false,
           isHighConfidence: false,
           isDoSOnly: true,
+          isAdjacentOnly: false,
         },
       ],
     });
