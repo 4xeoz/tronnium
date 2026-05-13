@@ -25,6 +25,10 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npx prisma generate
+
       - name: Type-check
         working-directory: backend
         run: npm run type-check
