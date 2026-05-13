@@ -1,7 +1,7 @@
 "use client";
 
 
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   FiExternalLink, FiEye, FiChevronLeft, FiChevronRight,
   FiCheck, FiFlag, FiZap, FiPackage, FiChevronRight as FiChevron,
@@ -62,7 +62,11 @@ function IndeterminateCheckbox({
   onChange: () => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
-  if (ref.current) ref.current.indeterminate = indeterminate && !checked;
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.indeterminate = indeterminate && !checked;
+    }
+  }, [indeterminate, checked]);
   return (
     <input
       ref={ref}

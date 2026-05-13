@@ -180,11 +180,11 @@ export default function Home() {
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  const featuresReveal = useReveal();
-  const stepsReveal = useReveal();
-  const realityReveal = useReveal();
-  const ctaReveal = useReveal();
-  const dashboardReveal = useReveal();
+  const { ref: featuresRef, revealed: featuresRevealed } = useReveal();
+  const { ref: stepsRef, revealed: stepsRevealed } = useReveal();
+  const { ref: realityRef, revealed: realityRevealed } = useReveal();
+  const { ref: ctaRef, revealed: ctaRevealed } = useReveal();
+  const { ref: dashboardRef, revealed: dashboardRevealed } = useReveal();
 
   return (
     <div className="min-h-screen bg-background text-text-primary overflow-x-hidden">
@@ -336,7 +336,7 @@ export default function Home() {
       {/* ═══════════════════════════════════════════════════════════ */}
       <section className="py-24 md:py-32 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-6">
-          <div ref={dashboardReveal.ref} className={`text-center mb-16 transition-all duration-700 ${dashboardReveal.revealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <div ref={dashboardRef} className={`text-center mb-16 transition-all duration-700 ${dashboardRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-1 mb-4">The Dashboard</p>
             <h2 className="text-display text-4xl md:text-5xl lg:text-6xl tracking-tight mb-4">
               Everything. <span className="gradient-text">One view.</span>
@@ -346,7 +346,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className={`relative mx-auto max-w-5xl transition-all duration-1000 delay-200 ${dashboardReveal.revealed ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-12 scale-[0.96]'}`}>
+          <div className={`relative mx-auto max-w-5xl transition-all duration-1000 delay-200 ${dashboardRevealed ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-12 scale-[0.96]'}`}>
             <div className="rounded-2xl overflow-hidden border border-border bg-surface shadow-2xl glow-green hover:shadow-[0_0_80px_rgba(159,232,112,0.12)] transition-shadow duration-700">
               <div className="h-10 bg-surface-secondary border-b border-border flex items-center px-4 gap-2">
                 <div className="flex gap-1.5">
@@ -435,7 +435,7 @@ export default function Home() {
       {/* ═══════════════════════════════════════════════════════════ */}
       <section id="features" className="py-24 md:py-32 relative">
         <div className="max-w-7xl mx-auto px-6">
-          <div ref={featuresReveal.ref} className={`text-center mb-16 transition-all duration-700 ${featuresReveal.revealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <div ref={featuresRef} className={`text-center mb-16 transition-all duration-700 ${featuresRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-1 mb-4">Features</p>
             <h2 className="text-display text-4xl md:text-5xl lg:text-6xl tracking-tight">
               <span className="gradient-text">What you get.</span>
@@ -465,7 +465,7 @@ export default function Home() {
         </div>
 
         <div className="max-w-7xl mx-auto px-6 relative">
-          <div ref={stepsReveal.ref} className={`text-center mb-20 transition-all duration-700 ${stepsReveal.revealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <div ref={stepsRef} className={`text-center mb-20 transition-all duration-700 ${stepsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-1 mb-4">How it works</p>
             <h2 className="text-display text-4xl md:text-5xl lg:text-6xl tracking-tight">
               <span className="gradient-text">Get started.</span>
@@ -484,7 +484,7 @@ export default function Home() {
             ].map((step, i) => (
               <div
                 key={step.num}
-                className={`relative group transition-all duration-700 ${stepsReveal.revealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
+                className={`relative group transition-all duration-700 ${stepsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
                 style={{ transitionDelay: `${200 + i * 150}ms` }}
               >
                 <div className="glass rounded-3xl p-8 h-full transition-all duration-500 hover:glow-green border border-border/50 hover:-translate-y-1">
@@ -514,7 +514,7 @@ export default function Home() {
         </div>
 
         <div className="max-w-5xl mx-auto px-6 relative">
-          <div ref={realityReveal.ref} className={`text-center mb-16 transition-all duration-700 ${realityReveal.revealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <div ref={realityRef} className={`text-center mb-16 transition-all duration-700 ${realityRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-1 mb-4">The Reality</p>
             <h2 className="text-display text-4xl md:text-5xl tracking-tight mb-4">
               Every project has <span className="gradient-text">two phases.</span>
@@ -527,7 +527,7 @@ export default function Home() {
           <div className="grid md:grid-cols-2 gap-6">
             {/* BEFORE */}
             <div
-              className={`group relative overflow-hidden rounded-3xl border border-border bg-surface transition-all duration-700 hover:border-brand-1/20 hover:-translate-y-1 ${realityReveal.revealed ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-10'}`}
+              className={`group relative overflow-hidden rounded-3xl border border-border bg-surface transition-all duration-700 hover:border-brand-1/20 hover:-translate-y-1 ${realityRevealed ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-10'}`}
               style={{ transitionDelay: '200ms' }}
             >
               <div className="absolute inset-0 bg-gradient-to-b from-brand-1/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -545,14 +545,14 @@ export default function Home() {
                     <div className="w-20 h-20 rounded-full bg-brand-1/10 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-500">
                       <FiCoffee className="w-8 h-8 text-brand-1" />
                     </div>
-                    <p className="text-sm text-text-muted font-medium">Your "before" photo</p>
+                    <p className="text-sm text-text-muted font-medium">Your &ldquo;before&rdquo; photo</p>
                     <p className="text-xs text-text-muted/60 mt-1">Replace this div with your image</p>
                   </div>
                 </div>
 
                 <h3 className="text-xl font-bold text-text-primary mb-2">Fresh & Optimistic</h3>
                 <p className="text-sm text-text-secondary leading-relaxed mb-4">
-                  "This is going to be a clean, well-architected project. I'll document everything. The code will be beautiful."
+                  &ldquo;This is going to be a clean, well-architected project. I&rsquo;ll document everything. The code will be beautiful.&rdquo;
                 </p>
                 <div className="flex items-center gap-2 text-xs text-brand-1 font-semibold">
                   <span className="w-1.5 h-1.5 rounded-full bg-brand-1 animate-pulse" />
@@ -563,7 +563,7 @@ export default function Home() {
 
             {/* AFTER */}
             <div
-              className={`group relative overflow-hidden rounded-3xl border border-error-border/30 bg-surface transition-all duration-700 hover:border-error-border/60 hover:-translate-y-1 ${realityReveal.revealed ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-10'}`}
+              className={`group relative overflow-hidden rounded-3xl border border-error-border/30 bg-surface transition-all duration-700 hover:border-error-border/60 hover:-translate-y-1 ${realityRevealed ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-10'}`}
               style={{ transitionDelay: '400ms' }}
             >
               <div className="absolute inset-0 bg-gradient-to-b from-error-text/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -581,25 +581,25 @@ export default function Home() {
                     <div className="w-20 h-20 rounded-full bg-error-bg flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-500">
                       <FiZap className="w-8 h-8 text-error-text" />
                     </div>
-                    <p className="text-sm text-text-muted font-medium">Your "after" photo</p>
+                    <p className="text-sm text-text-muted font-medium">Your &ldquo;after&rdquo; photo</p>
                     <p className="text-xs text-text-muted/60 mt-1">Exhausted but victorious</p>
                   </div>
                 </div>
 
                 <h3 className="text-xl font-bold text-text-primary mb-2">Fully Cooked</h3>
                 <p className="text-sm text-text-secondary leading-relaxed mb-4">
-                  "It's done. I don't know how, but it's done. Please don't ask me to explain the middleware. I am become Tronnium, builder of security tools."
+                  &ldquo;It&rsquo;s done. I don&rsquo;t know how, but it&rsquo;s done. Please don&rsquo;t ask me to explain the middleware. I am become Tronnium, builder of security tools.&rdquo;
                 </p>
                 <div className="flex items-center gap-2 text-xs text-error-text font-semibold">
                   <span className="w-1.5 h-1.5 rounded-full bg-error-text" />
-                  Energy level: 3% (but it's shipping)
+                  Energy level: 3% (but it&rsquo;s shipping)
                 </div>
               </div>
             </div>
           </div>
 
           {/* Timeline bar */}
-          <div className={`mt-12 relative transition-all duration-1000 delay-500 ${realityReveal.revealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+          <div className={`mt-12 relative transition-all duration-1000 delay-500 ${realityRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
             <div className="h-1 rounded-full bg-border overflow-hidden">
               <div className="h-full w-[99%] rounded-full bg-gradient-to-r from-brand-1 via-warning-text to-error-text animate-shimmer" />
             </div>
@@ -616,8 +616,8 @@ export default function Home() {
       {/* ── CTA ────────────────────────────────────────────────── */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <section className="py-24 md:py-32 relative overflow-hidden">
-        <div ref={ctaReveal.ref} className={`max-w-7xl mx-auto px-6 transition-all duration-700 ${ctaReveal.revealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-          <div className={`relative rounded-[32px] overflow-hidden transition-all duration-1000 delay-200 ${ctaReveal.revealed ? 'scale-100' : 'scale-[0.95]'}`}>
+        <div ref={ctaRef} className={`max-w-7xl mx-auto px-6 transition-all duration-700 ${ctaRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <div className={`relative rounded-[32px] overflow-hidden transition-all duration-1000 delay-200 ${ctaRevealed ? 'scale-100' : 'scale-[0.95]'}`}>
             <div className="absolute inset-0 bg-gradient-to-br from-brand-2 via-[#1a3a00] to-brand-2 animate-gradient-shift" />
             <div className="absolute inset-0 opacity-[0.07]"
               style={{

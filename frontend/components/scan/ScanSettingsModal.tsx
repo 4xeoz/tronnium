@@ -90,8 +90,8 @@ export default function ScanSettingsModal({
         setSettings(res.data);
         setFromDateOption(res.data.hasPreviousScan ? "last-scan" : "all");
       }
-    } catch (e: any) {
-      setError(e.message ?? "Failed to load settings");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load settings");
     } finally {
       setLoading(false);
     }
@@ -112,8 +112,8 @@ export default function ScanSettingsModal({
         setSchedFromDate(s.fromDate ?? "last-scan");
         setIsActive(s.isActive);
       }
-    } catch (e: any) {
-      setScheduleError(e.message ?? "Failed to load schedule");
+    } catch (e: unknown) {
+      setScheduleError(e instanceof Error ? e.message : "Failed to load schedule");
     } finally {
       setScheduleLoading(false);
     }
@@ -162,8 +162,8 @@ export default function ScanSettingsModal({
       };
       const res = await upsertSchedule(environmentId, input);
       setSchedule(res.data);
-    } catch (e: any) {
-      setScheduleError(e.message ?? "Failed to save schedule");
+    } catch (e: unknown) {
+      setScheduleError(e instanceof Error ? e.message : "Failed to save schedule");
     } finally {
       setSaving(false);
     }
@@ -177,8 +177,8 @@ export default function ScanSettingsModal({
       setIsActive(true);
       setFrequency("WEEKLY");
       setHour(2);
-    } catch (e: any) {
-      setScheduleError(e.message ?? "Failed to delete schedule");
+    } catch (e: unknown) {
+      setScheduleError(e instanceof Error ? e.message : "Failed to delete schedule");
     } finally {
       setSaving(false);
     }
