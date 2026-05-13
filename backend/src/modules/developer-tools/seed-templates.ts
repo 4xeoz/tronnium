@@ -50,9 +50,11 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
   {
     id: "enterprise-it",
     name: "Enterprise IT Network",
-    description: "Classic enterprise stack with web-facing services, internal APIs, and databases.",
+    description: "A classic three-tier app where a public web server becomes the doorway to everything inside.",
     longDescription:
-      "Demonstrates multi-hop lateral movement: an internet-facing web server with a high-confidence RCE vulnerability is the entry point. From there the attacker pivots to an internal API server, then to a database and auth service via credential theft. Good for understanding compromise score decay across hops.",
+      "The Problem: The external web server is directly reachable from the internet and runs a critical unauthenticated RCE (CVSS 9.8). It should never have been exposed without a WAF or VPN gateway.\n\n" +
+      "What Happened: An attacker sends a single malicious payload to the web server and gains full control. From there they move laterally to the internal API server, extract credentials from its broken access control, and use those stolen credentials to access the user database and authentication service. The file storage is also reachable but gated.\n\n" +
+      "What You'll Discover: The app detects 1 attack entry point (the web server) with a compromise score around 95%. The API server is reachable in 1 hop at roughly 75%. The database and auth service sit at 2 hops with scores around 55% — showing how compromise decays with distance. The file storage appears as a gated node (lock icon) because the traversal cost exceeds the default budget.",
     tags: ["IT", "web", "database", "credential-theft"],
     assets: [
       {
@@ -128,9 +130,11 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
   {
     id: "cloud-microservices",
     name: "Cloud Microservices",
-    description: "Container-based microservices deployment with API gateway, payment processing, and message queues.",
+    description: "A flat Kubernetes-style deployment where one compromised gateway exposes every service downstream.",
     longDescription:
-      "A compromised API gateway (container escape) can reach every downstream service in one or two hops. The payment service has a SQL injection that compounds the blast radius. Useful for demonstrating how a flat microservices architecture without segmentation amplifies a single entry point.",
+      "The Problem: The API gateway is internet-facing and vulnerable to container escape (CVSS 10.0). Worse, the microservices architecture has no network segmentation — every service talks directly to every other service through the gateway.\n\n" +
+      "What Happened: The attacker breaks out of the gateway container onto the host, then has direct network access to the user service, order service, payment service, and message queue. The payment service also has a SQL injection, letting the attacker extract payment records directly from the shared PostgreSQL database.\n\n" +
+      "What You'll Discover: The app detects 1 entry point (the gateway) with a near-100% compromise score. Because the architecture is flat, almost every asset is reachable within 1–2 hops. The blast radius will be wide — you'll see 6 assets reached with high scores across the board. This is the classic 'one entry, total exposure' pattern that flat microservices create.",
     tags: ["IT", "cloud", "containers", "microservices"],
     assets: [
       {
@@ -226,9 +230,11 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
   {
     id: "zero-trust-failure",
     name: "Zero Trust Failure Paths",
-    description: "Jump host compromise cascades through CI/CD, container registries, and a secrets manager to production.",
+    description: "A 'zero trust' pipeline that collapses because one jump host shares credentials with everything else.",
     longDescription:
-      "Shows how a single critical RCE on a jump host can break zero-trust assumptions. The attacker pivots through the CI/CD server (which has code execution + credential access), then reaches the secrets manager and ultimately the production database. Demonstrates the danger of shared credentials and implicit trust between pipeline components.",
+      "The Problem: The jump host is exposed to the internet and runs a pre-auth RCE (CVSS 10.0). Despite the 'zero trust' label, the CI/CD pipeline, container registry, secrets manager, and production database all trust each other's credentials implicitly. There is no segmentation between build and production.\n\n" +
+      "What Happened: The attacker owns the jump host, then uses shared SSH credentials to reach the developer workstation. From there they authenticate to the CI/CD server, which has template injection allowing arbitrary code execution. The CI/CD server can push code to the container registry and authenticate to the secrets manager. The secrets manager holds the production database credentials. Every hop is authenticated — the attacker never needs to exploit another vulnerability after the first one.\n\n" +
+      "What You'll Discover: The app detects 1 entry point (the jump host) with a compromise score near 100%. The CI/CD server and secrets manager will show elevated knowledge scores because the traversal uses AUTHENTICATES_VIA and SHARES_CREDENTIALS_WITH edges — the engine tracks credential theft as a separate knowledge metric. You'll see the production database as reachable in 3–4 hops, demonstrating that 'zero trust' without credential isolation is just trust with extra steps.",
     tags: ["IT", "zero-trust", "CI/CD", "secrets"],
     assets: [
       {
@@ -325,9 +331,11 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
   {
     id: "ot-power-grid",
     name: "OT Power Grid (ICS/SCADA)",
-    description: "Industrial control system for a power grid. Features adjacent-only (AV:A) vulnerabilities on PLCs showing OT-IT convergence risks.",
+    description: "A power grid where the IT corporate network bleeds straight into OT controllers with no air gap.",
     longDescription:
-      "An HMI workstation exposed on the corporate network is the entry point. From there the attacker reaches the SCADA server and engineering workstation, then pivots to PLC controllers via adjacent-only Modbus vulnerabilities (AV:A). The AV:A classification increases traversal cost — the attacker must first gain a foothold on the OT network segment. Highlights why OT-IT network segmentation is critical.",
+      "The Problem: The HMI workstation is on the corporate network and reachable from the internet. It manages the SCADA server, which controls the power grid's PLC controllers. There is no meaningful segmentation between IT and OT — the engineering workstation has credentials for both networks.\n\n" +
+      "What Happened: The attacker exploits the HMI's remote code execution vulnerability to gain a foothold. They pivot to the SCADA server, then use the engineering workstation's stored plaintext credentials to reach the PLC controllers. The PLCs are vulnerable to unauthenticated Modbus command injection, but only from adjacent network segments (AV:A), meaning the attacker must first land on the OT network.\n\n" +
+      "What You'll Discover: The app detects 1 entry point (the HMI workstation). The PLC controllers will show as reachable but with higher traversal costs due to their AV:A (adjacent-only) attack vector — the engine increases edge cost when the source lacks a direct network-pivot vulnerability. You'll see a clear IT→OT convergence path: HMI → SCADA → Engineering WS → PLCs. The historian server is reachable but with low security criticality, showing up as a lower-priority node.",
     tags: ["OT", "ICS", "SCADA", "PLC", "AV:A"],
     assets: [
       {
@@ -423,9 +431,11 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
   {
     id: "ot-manufacturing",
     name: "OT Manufacturing Floor",
-    description: "Factory automation with MES, robot controllers, and safety PLCs. Shows AV:A propagation through proprietary industrial protocols.",
+    description: "A factory floor where a single phished operator terminal can eventually reach the safety systems.",
     longDescription:
-      "An operator terminal connected to the corporate network is the entry point (spear-phishing RCE requiring user interaction). Once inside, the attacker reaches the MES server which has a clean network-pivot vuln, then fans out to robot controllers via adjacent-only proprietary bus vulnerabilities and finally to the safety PLC. Safety PLC compromise represents the highest-severity outcome — loss of safe state. Illustrates how UI-required entry points still lead to catastrophic outcomes if the blast radius is not contained.",
+      "The Problem: The operator terminal is on the corporate network and vulnerable to spear-phishing RCE (CVSS 9.6, requires user interaction). The MES server, robot controllers, and safety PLC all sit on the same flat OT network with no segmentation between operational and safety systems.\n\n" +
+      "What Happened: An operator opens a malicious HMI project file. The attacker gains control of the terminal, then pivots to the MES server which has an unauthenticated RCE in its web console. From the MES server the attacker fans out to both robot controllers via the proprietary fieldbus protocol, and finally to the safety PLC. The safety PLC has no direct vulnerability — it is reached purely through network connectivity from the MES server.\n\n" +
+      "What You'll Discover: The app detects 1 entry point (the operator terminal) with a compromise score around 95%. The MES server acts as a major pivot point with a high network-pivot score, enabling wide blast radius. The robot controllers appear as reachable nodes with moderate scores. The safety PLC is the most critical outcome — it has no vulnerability of its own but is reachable through the graph, demonstrating how safety systems can be compromised indirectly when they share a network with operational gear. The QC sensor network is reachable but with low operational criticality.",
     tags: ["OT", "manufacturing", "MES", "robots", "safety", "AV:A"],
     assets: [
       {
