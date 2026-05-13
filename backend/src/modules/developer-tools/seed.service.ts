@@ -52,6 +52,23 @@ export async function seedEnvironment(
         },
       });
       keyToId.set(assetDef.key, asset.id);
+
+      // Create the AssetCpe record so the asset has an identified software stack
+      await tx.assetCpe.create({
+        data: {
+          assetId: asset.id,
+          cpeName: assetDef.cpe.name,
+          title: assetDef.cpe.title,
+          score: 0.92,
+          vendor: assetDef.cpe.vendor,
+          product: assetDef.cpe.product,
+          version: assetDef.cpe.version,
+          vendorScore: 90,
+          productScore: 90,
+          versionScore: 88,
+          tokenOverlapScore: 90,
+        },
+      });
     }
 
     // 3. Vulnerabilities (per-asset scan chain for dashboard integration)
@@ -92,7 +109,7 @@ export async function seedEnvironment(
 
       for (const vulnDef of vulns) {
         const cveId = `${vulnDef.cveIdPrefix}-${suffix}`;
-        const cpeName = `cpe:2.3:a:demo:${assetDef.key}:1.0:*:*:*:*:*:*:*`;
+        const cpeName = assetDef.cpe.name;
 
         const vuln = await tx.vulnerability.create({
           data: {

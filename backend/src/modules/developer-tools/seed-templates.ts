@@ -9,12 +9,21 @@ export type SeedVuln = {
   severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 };
 
+export type SeedCpe = {
+  name: string;
+  title: string;
+  vendor: string;
+  product: string;
+  version: string;
+};
+
 export type SeedAsset = {
   key: string;
   name: string;
   type: string;
   domain: "IT" | "OT" | "UNKNOWN";
   isExternallyFacing: boolean;
+  cpe: SeedCpe;
   vulns?: SeedVuln[];
 };
 
@@ -52,6 +61,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: true,
+        cpe: { name: "cpe:2.3:a:nginx:nginx:1.24.0:*:*:*:*:*:*:*", title: "Nginx 1.24.0", vendor: "nginx", product: "nginx", version: "1.24.0" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-10001",
@@ -69,6 +79,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:nodejs:node.js:18.12.0:*:*:*:*:*:*:*", title: "Node.js 18.12.0", vendor: "nodejs", product: "node.js", version: "18.12.0" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-10002",
@@ -86,6 +97,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "database",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:postgresql:postgresql:15.1:*:*:*:*:*:*:*", title: "PostgreSQL 15.1", vendor: "postgresql", product: "postgresql", version: "15.1" },
       },
       {
         key: "auth",
@@ -93,6 +105,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:redhat:keycloak:21.0.1:*:*:*:*:*:*:*", title: "Keycloak 21.0.1", vendor: "redhat", product: "keycloak", version: "21.0.1" },
       },
       {
         key: "storage",
@@ -100,6 +113,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:minio:minio:2023.1.1:*:*:*:*:*:*:*", title: "MinIO 2023.1.1", vendor: "minio", product: "minio", version: "2023.1.1" },
       },
     ],
     relationships: [
@@ -125,6 +139,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "network",
         domain: "IT",
         isExternallyFacing: true,
+        cpe: { name: "cpe:2.3:a:konghq:kong:3.2.0:*:*:*:*:*:*:*", title: "Kong Gateway 3.2.0", vendor: "konghq", product: "kong", version: "3.2.0" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-20001",
@@ -142,6 +157,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:vmware:spring_boot:3.0.0:*:*:*:*:*:*:*", title: "Spring Boot 3.0.0", vendor: "vmware", product: "spring_boot", version: "3.0.0" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-20002",
@@ -159,6 +175,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:djangoproject:django:4.2:*:*:*:*:*:*:*", title: "Django 4.2", vendor: "djangoproject", product: "django", version: "4.2" },
       },
       {
         key: "payment-svc",
@@ -166,6 +183,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:golang:go:1.20.0:*:*:*:*:*:*:*", title: "Go 1.20.0", vendor: "golang", product: "go", version: "1.20.0" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-20003",
@@ -183,6 +201,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:pivotal_software:rabbitmq:3.11.0:*:*:*:*:*:*:*", title: "RabbitMQ 3.11.0", vendor: "pivotal_software", product: "rabbitmq", version: "3.11.0" },
       },
       {
         key: "pgdb",
@@ -190,6 +209,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "database",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:postgresql:postgresql:15.1:*:*:*:*:*:*:*", title: "PostgreSQL 15.1", vendor: "postgresql", product: "postgresql", version: "15.1" },
       },
     ],
     relationships: [
@@ -217,6 +237,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: true,
+        cpe: { name: "cpe:2.3:a:openbsd:openssh:9.0p1:*:*:*:*:*:*:*", title: "OpenSSH 9.0p1", vendor: "openbsd", product: "openssh", version: "9.0p1" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-50001",
@@ -234,6 +255,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:o:microsoft:windows_11:22h2:*:*:*:*:*:*:*", title: "Windows 11 22H2", vendor: "microsoft", product: "windows_11", version: "22h2" },
       },
       {
         key: "cicd",
@@ -241,6 +263,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:jenkins:jenkins:2.387.3:*:*:*:*:*:*:*", title: "Jenkins 2.387.3", vendor: "jenkins", product: "jenkins", version: "2.387.3" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-50002",
@@ -258,6 +281,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:docker:registry:2.8.1:*:*:*:*:*:*:*", title: "Docker Registry 2.8.1", vendor: "docker", product: "registry", version: "2.8.1" },
       },
       {
         key: "secrets",
@@ -265,6 +289,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:hashicorp:vault:1.13.0:*:*:*:*:*:*:*", title: "HashiCorp Vault 1.13.0", vendor: "hashicorp", product: "vault", version: "1.13.0" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-50003",
@@ -282,6 +307,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "database",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:postgresql:postgresql:14.5:*:*:*:*:*:*:*", title: "PostgreSQL 14.5", vendor: "postgresql", product: "postgresql", version: "14.5" },
       },
     ],
     relationships: [
@@ -310,6 +336,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "OT",
         isExternallyFacing: true,
+        cpe: { name: "cpe:2.3:a:siemens:wincc:7.5:*:*:*:*:*:*:*", title: "Siemens WinCC 7.5", vendor: "siemens", product: "wincc", version: "7.5" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-30001",
@@ -327,6 +354,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "OT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:siemens:tia_portal:17.0:*:*:*:*:*:*:*", title: "Siemens TIA Portal 17.0", vendor: "siemens", product: "tia_portal", version: "17.0" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-30002",
@@ -344,6 +372,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "OT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:ge:ifix:6.5:*:*:*:*:*:*:*", title: "GE iFIX 6.5", vendor: "ge", product: "ifix", version: "6.5" },
       },
       {
         key: "plc-a",
@@ -351,6 +380,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "iot",
         domain: "OT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:o:siemens:simatic_s7-1500_firmware:2.9.2:*:*:*:*:*:*:*", title: "Siemens S7-1500 Firmware 2.9.2", vendor: "siemens", product: "simatic_s7-1500_firmware", version: "2.9.2" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-30003",
@@ -368,6 +398,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "iot",
         domain: "OT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:o:siemens:simatic_s7-1200_firmware:4.5.0:*:*:*:*:*:*:*", title: "Siemens S7-1200 Firmware 4.5.0", vendor: "siemens", product: "simatic_s7-1200_firmware", version: "4.5.0" },
       },
       {
         key: "historian",
@@ -375,6 +406,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "database",
         domain: "IT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:osisoft:pi_server:2018:*:*:*:*:*:*:*", title: "OSIsoft PI Server 2018", vendor: "osisoft", product: "pi_server", version: "2018" },
       },
     ],
     relationships: [
@@ -402,6 +434,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "OT",
         isExternallyFacing: true,
+        cpe: { name: "cpe:2.3:a:rockwellautomation:factorytalk_view:13.0:*:*:*:*:*:*:*", title: "FactoryTalk View 13.0", vendor: "rockwellautomation", product: "factorytalk_view", version: "13.0" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-40001",
@@ -419,6 +452,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "server",
         domain: "OT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:sap:manufacturing_execution:15.1:*:*:*:*:*:*:*", title: "SAP Manufacturing Execution 15.1", vendor: "sap", product: "manufacturing_execution", version: "15.1" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-40002",
@@ -436,6 +470,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "iot",
         domain: "OT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:abb:robotware:7.0:*:*:*:*:*:*:*", title: "ABB RobotWare 7.0", vendor: "abb", product: "robotware", version: "7.0" },
         vulns: [
           {
             cveIdPrefix: "CVE-0000-40003",
@@ -453,6 +488,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "iot",
         domain: "OT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:abb:robotware:7.0:*:*:*:*:*:*:*", title: "ABB RobotWare 7.0", vendor: "abb", product: "robotware", version: "7.0" },
       },
       {
         key: "safety-plc",
@@ -460,6 +496,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "iot",
         domain: "OT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:o:rockwellautomation:guardlogix_5580_firmware:33.011:*:*:*:*:*:*:*", title: "GuardLogix 5580 Firmware 33.011", vendor: "rockwellautomation", product: "guardlogix_5580_firmware", version: "33.011" },
       },
       {
         key: "qc-sensor",
@@ -467,6 +504,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
         type: "iot",
         domain: "OT",
         isExternallyFacing: false,
+        cpe: { name: "cpe:2.3:a:cognex:in-sight_explorer:6.0:*:*:*:*:*:*:*", title: "Cognex In-Sight Explorer 6.0", vendor: "cognex", product: "in-sight_explorer", version: "6.0" },
       },
     ],
     relationships: [
