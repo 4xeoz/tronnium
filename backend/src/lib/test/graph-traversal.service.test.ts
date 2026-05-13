@@ -63,6 +63,7 @@ const highConfPivotClass = {
   requiresUserInteraction: false,
   isHighConfidence: true,
   isDoSOnly: false,
+  isAdjacentOnly: false,
 };
 
 const credTheftClass = {
@@ -73,6 +74,7 @@ const credTheftClass = {
   requiresUserInteraction: false,
   isHighConfidence: false,
   isDoSOnly: false,
+  isAdjacentOnly: false,
 };
 
 const mockProfilesA = new Map<string, AssetVulnProfile>([

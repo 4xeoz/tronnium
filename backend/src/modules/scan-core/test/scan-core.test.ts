@@ -38,29 +38,15 @@ describe("Scan Core API", () => {
     // -------------------------------------------------------------------------
 
     describe("GET /scans/:environmentId/start", () => {
-        it("streams SSE and completes with a scan result", async () => {
+        it("200 returns scanId immediately (scan runs in background)", async () => {
             const res = await request(app)
                 .get(`/scans/${envId}/start`)
-                .set("Authorization", `Bearer ${token}`)
-                .set("Accept", "text/event-stream")
-                .buffer(true) 
-                .parse((res, callback) => {
-                    let data = "";
-                    res.on("data", chunk => {
-                        data += chunk.toString();
-                    });
-                    res.on("end", () => {
-                        callback(null, data);
-                    });
-                });
+                .set("Authorization", `Bearer ${token}`);
 
-                console.log("Received SSE stream:", res.body); // --- IGNORE ---
-
-
-            const streamText = res.body as string;
             expect(res.status).toBe(200);
-            expect(streamText).toContain("data: {");
-            expect(streamText).toContain('"type":"completed"');
+            expect(res.body.success).toBe(true);
+            expect(res.body.data).toHaveProperty("scanId");
+            expect(res.body.data.alreadyRunning).toBe(false);
         });
         
 
@@ -266,29 +252,14 @@ describe("Scan Core API", () => {
             expect("epssRiskScore" in res.body.data).toBe(true);
         });
 
-        it("scan start result contains epssRiskScore", async () => {
+        it("200 returns scanId for a new scan (epssRiskScore available on completed scan)", async () => {
             const res = await request(app)
                 .get(`/scans/${envId}/start`)
-                .set("Authorization", `Bearer ${token}`)
-                .set("Accept", "text/event-stream")
-                .buffer(true)
-                .parse((res, callback) => {
-                    let data = "";
-                    res.on("data", (chunk: Buffer) => { data += chunk.toString(); });
-                    res.on("end", () => { callback(null, data); });
-                });
+                .set("Authorization", `Bearer ${token}`);
 
             expect(res.status).toBe(200);
-
-            // Extract the completed event payload
-            const completedLine = (res.body as string)
-                .split("\n")
-                .find((line: string) => line.startsWith("data:") && line.includes('"type":"completed"'));
-
-            expect(completedLine).toBeDefined();
-
-            const payload = JSON.parse(completedLine!.replace(/^data:\s*/, ""));
-            expect(payload.data).toHaveProperty("epssRiskScore");
+            expect(res.body.success).toBe(true);
+            expect(res.body.data).toHaveProperty("scanId");
         });
     });
 

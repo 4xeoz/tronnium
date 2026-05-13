@@ -1,10 +1,7 @@
-// Test script for cpe-ranking.service.ts
-// Run with: npx ts-node src/modules/asset-cpes/search/cpe-ranking.service.test.ts
-
+import { describe, it, expect } from "@jest/globals";
 import { rankCpeCandidates } from './cpe-ranking.service';
 import type { ParsedAsset, CpeProduct } from '../cpe.types';
 
-// Sample ParsedAsset (simulating what cpe.ts would produce)
 const testAsset: ParsedAsset = {
     raw: "eWon eWon Firmware 10.0s0",
     normalized: "ewon ewon firmware 10.0s0",
@@ -15,7 +12,6 @@ const testAsset: ParsedAsset = {
     versionCandidates: ["10.0s0", "10.0", "10"]
 };
 
-// Sample CpeProducts (simulating NVD API response)
 const testCpeProducts: CpeProduct[] = [
     {
         cpe: {
@@ -74,30 +70,20 @@ const testCpeProducts: CpeProduct[] = [
     }
 ];
 
-console.log("=".repeat(60));
-console.log("CPE RANKING ENGINE TEST");
-console.log("=".repeat(60));
+describe("CPE Ranking Engine", () => {
+    it("ranks exact vendor/product/version matches highest", () => {
+        const results = rankCpeCandidates(testAsset, testCpeProducts, 5);
 
-console.log("\n📋 Test Asset:");
-console.log(`   Vendor:  ${testAsset.vendor}`);
-console.log(`   Product: ${testAsset.product}`);
-console.log(`   Version: ${testAsset.version}`);
-console.log(`   Tokens:  [${testAsset.tokens.join(", ")}]`);
+        expect(results.length).toBeGreaterThan(0);
+        expect(results[0].cpeName).toBe("cpe:2.3:o:ewon:ewon_firmware:10.0s0:*:*:*:*:*:*:*");
+        expect(results[0].score).toBeGreaterThan(0);
+    });
 
-console.log("\n🔍 Testing rankCpeCandidates()...\n");
+    it("returns results sorted by descending score", () => {
+        const results = rankCpeCandidates(testAsset, testCpeProducts, 5);
 
-const results = rankCpeCandidates(testAsset, testCpeProducts, 5);
-
-console.log(`Found ${results.length} ranked candidates:\n`);
-
-results.forEach((candidate, index) => {
-    console.log(`${index + 1}. ${candidate.cpeName}`);
-    console.log(`   Title: ${candidate.title || "N/A"}`);
-    console.log(`   Score: ${candidate.score}%`);
-    console.log(`   Breakdown:`);
-    console.log(`     - Vendor:  ${(candidate.breakdown.vendorScore * 100).toFixed(1)}%`);
-    console.log(`     - Product: ${(candidate.breakdown.productScore * 100).toFixed(1)}%`);
-    console.log(`     - Version: ${(candidate.breakdown.versionScore * 100).toFixed(1)}%`);
-    console.log(`     - Tokens:  ${(candidate.breakdown.tokenOverlapScore * 100).toFixed(1)}%`);
-    console.log("");
+        for (let i = 1; i < results.length; i++) {
+            expect(results[i - 1].score).toBeGreaterThanOrEqual(results[i].score);
+        }
+    });
 });

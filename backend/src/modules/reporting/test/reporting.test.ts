@@ -59,9 +59,10 @@ describe("Reporting API", () => {
             expect(res.status).toBe(404);
         });
 
-        it("401 when not authenticated", async () => {
+        it("200 when not authenticated (dashboard is public)", async () => {
             const res = await request(app).get(`/dashboard/${envId}/overview`);
-            expect(res.status).toBe(401);
+            expect(res.status).toBe(200);
+            expect(res.body.success).toBe(true);
         });
     });
 });

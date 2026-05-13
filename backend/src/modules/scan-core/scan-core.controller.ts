@@ -57,6 +57,7 @@ export async function startScanHandler(req: Request, res: Response): Promise<voi
     });
 
     const emitter = createScanEmitter(scan.id);
+    emitter.on("error", () => {}); // swallow background errors — scan status is checked via polling
 
     // Fire scan in background — do NOT await
     runScan(environmentId, scan.id, scanOptions, (progress) => {

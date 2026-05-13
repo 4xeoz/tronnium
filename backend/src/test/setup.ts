@@ -1,5 +1,7 @@
 
-import { afterAll } from "@jest/globals";  
+import { afterAll } from "@jest/globals";
+
+jest.mock("@xenova/transformers");
 
 import dotenv from "dotenv";
 dotenv.config({ path: ".env" });

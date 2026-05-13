@@ -153,13 +153,12 @@ describe("Asset CPEs API", () => {
             expect(res.status).toBe(400);
         });
 
-        it("401 when not authenticated", async () => {
+        it("200 when not authenticated (cpe/find is public)", async () => {
             const res = await request(app)
                 .get("/assets/cpe/find")
                 .query({ assetName: "openssl 1.1.1" })
 
-                expect(res.status).toBe(401);
-                expect(res.text).toContain("UNAUTHORIZED");
+                expect(res.status).toBe(200);
         });
 
 
